@@ -1,6 +1,6 @@
 
 """
-粤教服务 - DAO数据访问层
+粤教服务 - CRUD数据访问层
 封装所有数据库的增删改查操作
 """
 
@@ -13,10 +13,198 @@ from model import (
     StudentAdminService, StudentPsychProfile, StudentPsychAlert,
     StudentFeedbackTicket
 )
-from http.client import HTTPException
 
 
-class StudentServiceDAO:
+class UserCRUD:
+    """用户数据访问对象"""
+
+    @staticmethod
+    def create(db: Session, **kwargs):
+        """创建用户"""
+        user = SysUser(**kwargs)
+        db.add(user)
+        return user
+
+    @staticmethod
+    def get_by_id(db: Session, user_id: int):
+        """根据ID查询用户"""
+        return db.query(SysUser).filter(SysUser.id == user_id, SysUser.delete_flag == 0).first()
+
+    @staticmethod
+    def get_by_username(db: Session, username: str):
+        """根据用户名查询用户"""
+        return db.query(SysUser).filter(SysUser.username == username, SysUser.delete_flag == 0).first()
+
+    @staticmethod
+    def get_student_by_id(db: Session, student_id: int):
+        """根据ID查询学生（user_type=STUDENT 且 delete_flag=0）"""
+        return db.query(SysUser).filter(
+            SysUser.id == student_id,
+            SysUser.user_type == "STUDENT",
+            SysUser.delete_flag == 0
+        ).first()
+
+    @staticmethod
+    def update(db: Session, user_id: int, **kwargs):
+        """更新用户信息"""
+        user = UserCRUD.get_by_id(db, user_id)
+        if user:
+            for key, value in kwargs.items():
+                if value is not None:
+                    setattr(user, key, value)
+        return user
+
+    @staticmethod
+    def delete(db: Session, user_id: int):
+        """软删除用户"""
+        user = UserCRUD.get_by_id(db, user_id)
+        if user:
+            user.delete_flag = 1
+        return user
+
+
+class EventCRUD:
+    """活动讲座数据访问对象"""
+
+    @staticmethod
+    def create(db: Session, **kwargs):
+        """创建活动"""
+        event = EventLecture(**kwargs)
+        db.add(event)
+        return event
+
+    @staticmethod
+    def get_by_id(db: Session, event_id: int):
+        """根据ID查询活动"""
+        return db.query(EventLecture).filter(EventLecture.id == event_id, EventLecture.delete_flag == 0).first()
+
+    @staticmethod
+    def get_all(db: Session):
+        """查询所有活动"""
+        return db.query(EventLecture).filter(EventLecture.delete_flag == 0).order_by(EventLecture.start_time.desc()).all()
+
+    @staticmethod
+    def register(db: Session, event_id: int, customer_id: int = None, customer_name: str = "", contact: str = ""):
+        """活动报名"""
+        registration = EventRegistration(
+            event_id=event_id,
+            customer_id=customer_id,
+            customer_name=customer_name,
+            contact=contact
+        )
+        db.add(registration)
+        # 更新报名人数
+        event = EventCRUD.get_by_id(db, event_id)
+        if event:
+            event.current_participants = (event.current_participants or 0) + 1
+        return registration
+
+    @staticmethod
+    def get_registrations(db: Session, event_id: int):
+        """查询活动报名列表"""
+        return db.query(EventRegistration).filter(
+            EventRegistration.event_id == event_id,
+            EventRegistration.delete_flag == 0
+        ).all()
+
+
+class ProjectCRUD:
+    """课程项目数据访问对象"""
+
+    @staticmethod
+    def create(db: Session, **kwargs):
+        """创建项目"""
+        project = CourseProject(**kwargs)
+        db.add(project)
+        return project
+
+    @staticmethod
+    def get_by_id(db: Session, project_id: int):
+        """根据ID查询项目"""
+        return db.query(CourseProject).filter(CourseProject.id == project_id, CourseProject.delete_flag == 0).first()
+
+    @staticmethod
+    def get_all(db: Session, category: str = ""):
+        """查询所有项目"""
+        query = db.query(CourseProject).filter(CourseProject.delete_flag == 0)
+        if category:
+            query = query.filter(CourseProject.category == category)
+        return query.order_by(CourseProject.sort_order).all()
+
+
+class CrmCRUD:
+    """意向客户数据访问对象"""
+
+    @staticmethod
+    def create(db: Session, **kwargs):
+        """创建客户"""
+        lead = CrmLead(**kwargs)
+        db.add(lead)
+        return lead
+
+    @staticmethod
+    def get_by_id(db: Session, lead_id: int):
+        """根据ID查询客户"""
+        return db.query(CrmLead).filter(CrmLead.id == lead_id, CrmLead.delete_flag == 0).first()
+
+    @staticmethod
+    def get_all(db: Session, status: str = ""):
+        """查询客户列表"""
+        query = db.query(CrmLead).filter(CrmLead.delete_flag == 0)
+        if status:
+            query = query.filter(CrmLead.status == status)
+        return query.order_by(CrmLead.create_time.desc()).all()
+
+    @staticmethod
+    def update(db: Session, lead_id: int, **kwargs):
+        """更新客户信息"""
+        lead = CrmCRUD.get_by_id(db, lead_id)
+        if lead:
+            for key, value in kwargs.items():
+                if value is not None:
+                    setattr(lead, key, value)
+        return lead
+
+
+class ReportCRUD:
+    """员工日报数据访问对象"""
+
+    @staticmethod
+    def create(db: Session, **kwargs):
+        """提交日报"""
+        report = EmployeeDailyReport(**kwargs)
+        db.add(report)
+        return report
+
+    @staticmethod
+    def get_all(db: Session, employee_id: int = 0):
+        """查询日报列表"""
+        query = db.query(EmployeeDailyReport).filter(EmployeeDailyReport.delete_flag == 0)
+        if employee_id:
+            query = query.filter(EmployeeDailyReport.employee_id == employee_id)
+        return query.order_by(EmployeeDailyReport.report_date.desc()).all()
+
+
+class ScoreCRUD:
+    """学生成绩数据访问对象"""
+
+    @staticmethod
+    def create(db: Session, **kwargs):
+        """录入成绩"""
+        score = StudentScore(**kwargs)
+        db.add(score)
+        return score
+
+    @staticmethod
+    def get_by_student(db: Session, student_id: int):
+        """查询学生成绩"""
+        return db.query(StudentScore).filter(
+            StudentScore.student_id == student_id,
+            StudentScore.delete_flag == 0
+        ).order_by(StudentScore.exam_time.desc()).all()
+
+
+class StudentServiceCRUD:
     """学生行政服务数据访问对象"""
 
     @staticmethod
@@ -46,7 +234,7 @@ class StudentServiceDAO:
         return query.order_by(StudentAdminService.create_time.desc()).all()
 
 
-class FeedbackDAO:
+class FeedbackCRUD:
     """投诉反馈数据访问对象"""
 
     @staticmethod
@@ -72,7 +260,7 @@ class FeedbackDAO:
         return query.order_by(StudentFeedbackTicket.create_time.desc()).all()
 
 
-class PsychAlertDAO:
+class PsychAlertCRUD:
     """心理预警数据访问对象"""
 
     @staticmethod
@@ -124,7 +312,7 @@ class PsychAlertDAO:
             db.add(new_profile)
 
 
-class DashboardDAO:
+class DashboardCRUD:
     """仪表盘数据访问对象"""
 
     @staticmethod

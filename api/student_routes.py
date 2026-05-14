@@ -1,6 +1,6 @@
 """
 粤教服务 - API路由层
-处理HTTP请求和响应，调用DAO层完成业务逻辑
+处理HTTP请求和响应，调用CRUD层完成业务逻辑
 """
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -14,9 +14,9 @@ from schemas import (
     FeedbackCreateRequest, PsychAlertCreateRequest,
     UserCreateRequest, UserUpdateRequest
 )
-from dao import (
-    UserDAO, EventDAO, ProjectDAO, CrmDAO, ReportDAO, ScoreDAO,
-    StudentServiceDAO, FeedbackDAO, PsychAlertDAO, DashboardDAO
+from crud import (
+    UserCRUD, EventCRUD, ProjectCRUD, CrmCRUD, ReportCRUD, ScoreCRUD,
+    StudentServiceCRUD, FeedbackCRUD, PsychAlertCRUD, DashboardCRUD
 )
 
 
@@ -37,6 +37,15 @@ def health_check():
     return {"status": "healthy", "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 # ==================== 学生助手接口 ====================
+
+def _validate_student(student_id: int, db: Session):
+    """验证学生身份：必须是STUDENT类型且未被软删除"""
+    student = UserCRUD.get_student_by_id(db, student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail=f"学生不存在或已删除(student_id={student_id})")
+    return student
+
+
 # ---- 根据id查询学生信息 ----
 
 
@@ -44,7 +53,9 @@ def health_check():
 @router.post("/api/student/leave")
 def create_leave(req: LeaveCreateRequest, db: Session = Depends(get_db)):
     """学生提交请假申请"""
-    StudentServiceDAO.create_leave(
+    _validate_student(req.student_id, db)
+
+    StudentServiceCRUD.create_leave(
         db, req.student_id, req.service_type,
         datetime.strptime(req.start_time, "%Y-%m-%d %H:%M"),
         datetime.strptime(req.end_time, "%Y-%m-%d %H:%M"),
@@ -59,7 +70,9 @@ def create_leave(req: LeaveCreateRequest, db: Session = Depends(get_db)):
 @router.get("/api/student/leave")
 def list_leaves(student_id: int = 0, db: Session = Depends(get_db)):
     """查询请假记录"""
-    leaves = StudentServiceDAO.get_leaves(db, student_id)
+    if student_id:
+        _validate_student(student_id, db)
+    leaves = StudentServiceCRUD.get_leaves(db, student_id)
     return {"leaves": [
         {"id": l.id, "student_id": l.student_id, "leave_type": l.leave_type,
          "start": str(l.start_time), "end": str(l.end_time), "reason": l.reason,
@@ -72,7 +85,8 @@ def list_leaves(student_id: int = 0, db: Session = Depends(get_db)):
 @router.post("/api/student/feedback")
 def create_feedback(req: FeedbackCreateRequest, db: Session = Depends(get_db)):
     """学生提交投诉反馈"""
-    ticket = FeedbackDAO.create(
+    _validate_student(req.student_id, db)
+    ticket = FeedbackCRUD.create(
         db, req.student_id, req.content, req.detail,
         feedback_type=req.feedback_type, urgency_level=req.urgency_level
     )
@@ -84,7 +98,9 @@ def create_feedback(req: FeedbackCreateRequest, db: Session = Depends(get_db)):
 @router.get("/api/student/feedback")
 def list_feedback(student_id: int = 0, db: Session = Depends(get_db)):
     """查询投诉反馈列表"""
-    tickets = FeedbackDAO.get_all(db, student_id)
+    if student_id:
+        _validate_student(student_id, db)
+    tickets = FeedbackCRUD.get_all(db, student_id)
     return {"tickets": [
         {"id": t.id, "student_id": t.student_id, "feedback_type": t.feedback_type,
          "content": t.content, "urgency_level": t.urgency_level,
@@ -97,8 +113,9 @@ def list_feedback(student_id: int = 0, db: Session = Depends(get_db)):
 @router.post("/api/student/psych-alert")
 def create_psych_alert(req: PsychAlertCreateRequest, db: Session = Depends(get_db)):
     """提交心理预警"""
-    alert = PsychAlertDAO.create(db, req.student_id, req.trigger_reason, req.risk_level, req.alert_source)
-    PsychAlertDAO.update_profile(db, req.student_id, req.risk_level)
+    _validate_student(req.student_id, db)
+    alert = PsychAlertCRUD.create(db, req.student_id, req.trigger_reason, req.risk_level, req.alert_source)
+    PsychAlertCRUD.update_profile(db, req.student_id, req.risk_level)
     db.commit()
     return {"success": True, "alert_id": alert.id,
             "message": f"已记录{req.risk_level}风险预警，老师会尽快跟进"}
@@ -108,7 +125,7 @@ def create_psych_alert(req: PsychAlertCreateRequest, db: Session = Depends(get_d
 @router.get("/api/student/psych-alert")
 def list_psych_alerts(risk_level: str = "", db: Session = Depends(get_db)):
     """查询心理预警列表"""
-    alerts = PsychAlertDAO.get_all(db, risk_level)
+    alerts = PsychAlertCRUD.get_all(db, risk_level)
     return {"alerts": [
         {"id": a.id, "student_id": a.student_id, "trigger_reason": a.trigger_reason,
          "risk_level": a.risk_level, "alert_source": a.alert_source, "status": a.status,
@@ -122,4 +139,4 @@ def list_psych_alerts(risk_level: str = "", db: Session = Depends(get_db)):
 @router.get("/api/reports/dashboard")
 def dashboard(db: Session = Depends(get_db)):
     """管理仪表盘数据"""
-    return DashboardDAO.get_stats(db)
+    return DashboardCRUD.get_stats(db)
