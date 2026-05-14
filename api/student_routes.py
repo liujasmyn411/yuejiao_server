@@ -54,8 +54,11 @@ def _validate_student(student_id: int, db: Session):
 def create_leave(req: LeaveCreateRequest, db: Session = Depends(get_db)):
     """学生提交请假申请"""
     _validate_student(req.student_id, db)
-    StudentServiceCRUD.create_leave(db, req)
-    db.commit()
+    try:
+        StudentServiceCRUD.create_leave(db, req)
+        db.commit()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return {"success": True, "message": "请假申请已提交，等待审批"}
 
 

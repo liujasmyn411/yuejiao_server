@@ -213,6 +213,19 @@ class StudentServiceCRUD:
     @staticmethod
     def create_leave(db: Session, req: LeaveCreateRequest):
         """提交请假申请"""
+        # 防重复检测：同一学生在相同时间段、相同请假类型的申请已存在
+        existing = db.query(StudentAdminService).filter(
+            StudentAdminService.student_id == req.student_id,
+            StudentAdminService.service_type == "请假",
+            StudentAdminService.leave_type == req.leave_type,
+            StudentAdminService.start_time == req.start_time,
+            StudentAdminService.end_time == req.end_time,
+            StudentAdminService.reason == req.reason,
+            StudentAdminService.delete_flag == 0
+        ).first()
+        if existing:
+            raise ValueError("请勿重复提交")
+
         data = req.model_dump(exclude_none=True)
         data["status"] = "待审批"
         leave = StudentAdminService(**data)
