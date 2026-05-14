@@ -54,14 +54,7 @@ def _validate_student(student_id: int, db: Session):
 def create_leave(req: LeaveCreateRequest, db: Session = Depends(get_db)):
     """学生提交请假申请"""
     _validate_student(req.student_id, db)
-
-    StudentServiceCRUD.create_leave(
-        db, req.student_id, req.service_type,
-        datetime.strptime(req.start_time, "%Y-%m-%d %H:%M"),
-        datetime.strptime(req.end_time, "%Y-%m-%d %H:%M"),
-        req.reason,
-        leave_type=req.leave_type
-    )
+    StudentServiceCRUD.create_leave(db, req)
     db.commit()
     return {"success": True, "message": "请假申请已提交，等待审批"}
 
@@ -86,10 +79,7 @@ def list_leaves(student_id: int = 0, db: Session = Depends(get_db)):
 def create_feedback(req: FeedbackCreateRequest, db: Session = Depends(get_db)):
     """学生提交投诉反馈"""
     _validate_student(req.student_id, db)
-    ticket = FeedbackCRUD.create(
-        db, req.student_id, req.content, req.detail,
-        feedback_type=req.feedback_type, urgency_level=req.urgency_level
-    )
+    ticket = FeedbackCRUD.create(db, req)
     db.commit()
     return {"success": True, "ticket_id": ticket.id, "message": "投诉已提交，我们会尽快处理"}
 
@@ -114,7 +104,7 @@ def list_feedback(student_id: int = 0, db: Session = Depends(get_db)):
 def create_psych_alert(req: PsychAlertCreateRequest, db: Session = Depends(get_db)):
     """提交心理预警"""
     _validate_student(req.student_id, db)
-    alert = PsychAlertCRUD.create(db, req.student_id, req.trigger_reason, req.risk_level, req.alert_source)
+    alert = PsychAlertCRUD.create(db, req)
     PsychAlertCRUD.update_profile(db, req.student_id, req.risk_level)
     db.commit()
     return {"success": True, "alert_id": alert.id,

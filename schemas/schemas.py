@@ -4,7 +4,7 @@
 """
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, Any, Generic, TypeVar, List
 
 # 泛型类型变量，用于响应体模型
@@ -144,13 +144,21 @@ class LeaveCreateRequest(BaseModel):
     end_time: Optional[datetime] = None
     reason: Optional[str] = None
 
+    @field_validator("start_time", "end_time", mode="before")
+    @classmethod
+    def parse_datetime(cls, v):
+        """兼容 '2025-01-01 09:00' 格式的 datetime 字符串"""
+        if isinstance(v, str):
+            return datetime.strptime(v, "%Y-%m-%d %H:%M")
+        return v
+
 
 class FeedbackCreateRequest(BaseModel):
     """投诉反馈提交请求"""
     student_id: int
     content: str
     detail: Optional[str] = None
-    feedback_type: Optional[str] = None
+    feedback_type: Optional[str] = "咨询"
     urgency_level: Optional[str] = "中"
 
 

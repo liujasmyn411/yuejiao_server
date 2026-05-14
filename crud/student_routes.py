@@ -13,6 +13,9 @@ from model import (
     StudentAdminService, StudentPsychProfile, StudentPsychAlert,
     StudentFeedbackTicket
 )
+from schemas import (
+    LeaveCreateRequest, FeedbackCreateRequest, PsychAlertCreateRequest
+)
 
 
 class UserCRUD:
@@ -208,17 +211,11 @@ class StudentServiceCRUD:
     """学生行政服务数据访问对象"""
 
     @staticmethod
-    def create_leave(db: Session, student_id: int, service_type: str, start_time: datetime, end_time: datetime, reason: str, leave_type: str = ""):
+    def create_leave(db: Session, req: LeaveCreateRequest):
         """提交请假申请"""
-        leave = StudentAdminService(
-            student_id=student_id,
-            service_type=service_type,
-            leave_type=leave_type,
-            start_time=start_time,
-            end_time=end_time,
-            reason=reason,
-            status="待审批"
-        )
+        data = req.model_dump(exclude_none=True)
+        data["status"] = "待审批"
+        leave = StudentAdminService(**data)
         db.add(leave)
         return leave
 
@@ -238,16 +235,11 @@ class FeedbackCRUD:
     """投诉反馈数据访问对象"""
 
     @staticmethod
-    def create(db: Session, student_id: int, content: str, detail: str = "", feedback_type: str = "咨询", urgency_level: str = "中"):
+    def create(db: Session, req: FeedbackCreateRequest):
         """提交投诉反馈"""
-        ticket = StudentFeedbackTicket(
-            student_id=student_id,
-            feedback_type=feedback_type,
-            content=content,
-            detail=detail,
-            urgency_level=urgency_level,
-            status="待处理"
-        )
+        data = req.model_dump(exclude_none=True)
+        data["status"] = "待处理"
+        ticket = StudentFeedbackTicket(**data)
         db.add(ticket)
         return ticket
 
@@ -264,15 +256,11 @@ class PsychAlertCRUD:
     """心理预警数据访问对象"""
 
     @staticmethod
-    def create(db: Session, student_id: int, trigger_reason: str, risk_level: str, alert_source: str = "聊天对话"):
+    def create(db: Session, req: PsychAlertCreateRequest):
         """提交心理预警"""
-        alert = StudentPsychAlert(
-            student_id=student_id,
-            trigger_reason=trigger_reason,
-            risk_level=risk_level,
-            alert_source=alert_source,
-            status="未处理"
-        )
+        data = req.model_dump(exclude_none=True)
+        data["status"] = "未处理"
+        alert = StudentPsychAlert(**data)
         db.add(alert)
         return alert
 
