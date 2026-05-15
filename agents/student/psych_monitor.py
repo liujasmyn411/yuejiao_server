@@ -101,6 +101,5 @@ class PsychMonitor:
         return evaluation.get("risk_level") in ("high", "medium")
 
     def get_alert_level(self, evaluation: dict) -> str:
-        """获取预警等级对应的中文描述"""
-        mapping = {"high": "高", "medium": "中", "low": "低", "none": "无"}
-        return mapping.get(evaluation.get("risk_level", "none"), "无")
+        """获取预警等级"""
+        return evaluation.get("risk_level", "none")

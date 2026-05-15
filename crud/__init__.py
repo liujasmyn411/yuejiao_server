@@ -1,29 +1,25 @@
-from crud.student_routes import (
-    UserCRUD,
-    EventCRUD,
-    ProjectCRUD,
-    CrmCRUD,
-    ReportCRUD,
-    ScoreCRUD,
-    StudentServiceCRUD,
-    FeedbackCRUD,
-    PsychAlertCRUD,
-    AcademicCRUD,
-    StudyAbroadCRUD,
-    DashboardCRUD,
+from crud.customer_crud import EventCRUD, ProjectCRUD
+from crud.enterprise_crud import CrmCRUD, ReportCRUD, ScoreCRUD, EmployeeCRUD, DashboardCRUD
+from crud.student_crud import (
+    UserCRUD, StudentServiceCRUD, FeedbackCRUD, PsychAlertCRUD,
+    AcademicCRUD, StudyAbroadCRUD
 )
 
 __all__ = [
-    "UserCRUD",
+    # 客服智能助手
     "EventCRUD",
     "ProjectCRUD",
+    # 企业智能助手
     "CrmCRUD",
     "ReportCRUD",
     "ScoreCRUD",
+    "EmployeeCRUD",
+    "DashboardCRUD",
+    # 学生智能助手
+    "UserCRUD",
     "StudentServiceCRUD",
     "FeedbackCRUD",
     "PsychAlertCRUD",
     "AcademicCRUD",
     "StudyAbroadCRUD",
-    "DashboardCRUD",
 ]

@@ -11,7 +11,7 @@ from schemas import (
     ReportCreateRequest, ScoreCreateRequest,
 )
 from crud import (
-    UserCRUD, CrmCRUD, ReportCRUD, ScoreCRUD, DashboardCRUD
+    UserCRUD, CrmCRUD, ReportCRUD, ScoreCRUD, EmployeeCRUD, DashboardCRUD
 )
 
 router = APIRouter(prefix="/api/enterprise", tags=["企业智能助手"])
@@ -114,11 +114,7 @@ def list_scores(student_id: int, db: Session = Depends(get_db)):
 @router.get("/employee")
 def list_employees(db: Session = Depends(get_db)):
     """查询员工列表"""
-    from model import SysUser
-    employees = db.query(SysUser).filter(
-        SysUser.user_type == "EMPLOYEE",
-        SysUser.delete_flag == 0
-    ).all()
+    employees = EmployeeCRUD.get_all(db)
     return {"employees": [
         {
             "id": e.id, "real_name": e.real_name,

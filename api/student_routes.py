@@ -13,7 +13,8 @@ from schemas import (
     ReportCreateRequest, ScoreCreateRequest, LeaveCreateRequest,
     FeedbackCreateRequest, PsychAlertCreateRequest,
     UserCreateRequest, UserUpdateRequest,
-    AcademicQueryRequest, StudyAbroadQueryRequest
+    AcademicQueryRequest, StudyAbroadQueryRequest,
+    RiskLevelEnum
 )
 from crud import (
     UserCRUD, EventCRUD, ProjectCRUD, CrmCRUD, ReportCRUD, ScoreCRUD,
@@ -132,9 +133,9 @@ def create_psych_alert(req: PsychAlertCreateRequest, db: Session = Depends(get_d
 
 # ---- 心理预警: 查询 ----
 @router.get("/api/student/psych-alert")
-def list_psych_alerts(risk_level: str = "", db: Session = Depends(get_db)):
+def list_psych_alerts(risk_level: RiskLevelEnum = None, db: Session = Depends(get_db)):
     """查询心理预警列表"""
-    alerts = PsychAlertCRUD.get_all(db, risk_level)
+    alerts = PsychAlertCRUD.get_all(db, risk_level.value if risk_level else "")
     return {"alerts": [
         {"id": a.id, "student_id": a.student_id, "trigger_reason": a.trigger_reason,
          "risk_level": a.risk_level, "alert_source": a.alert_source, "status": a.status,

@@ -4,6 +4,8 @@
 """
 from datetime import datetime
 
+from enum import Enum
+
 from pydantic import BaseModel, ConfigDict, field_validator
 from typing import Optional, Any, Generic, TypeVar, List
 
@@ -162,11 +164,19 @@ class FeedbackCreateRequest(BaseModel):
     urgency_level: Optional[str] = "中"
 
 
+class RiskLevelEnum(str, Enum):
+    """心理预警风险等级"""
+    high = "high"
+    medium = "medium"
+    low = "low"
+    none = "none"
+
+
 class PsychAlertCreateRequest(BaseModel):
     """心理预警提交请求"""
     student_id: int
     trigger_reason: Optional[str] = None
-    risk_level: str
+    risk_level: RiskLevelEnum
     alert_source: Optional[str] = "聊天对话"
 
 

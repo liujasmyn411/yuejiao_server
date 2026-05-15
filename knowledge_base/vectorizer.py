@@ -12,7 +12,7 @@ class RAGEngine:
     """知识库检索增强生成引擎"""
 
     def __init__(self, kb_dir: str = None):
-        self.kb_dir = kb_dir or str(Path(__file__).resolve().parent.parent / "知识库")
+        self.kb_dir = kb_dir or str(Path(__file__).resolve().parent / "data")
         self.chunks: list[dict] = []
         self.qa_pairs: list[dict] = []
         self._loaded = False

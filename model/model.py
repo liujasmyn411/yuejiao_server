@@ -79,7 +79,7 @@ class StudentPsychAlert(Base):
     id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
     student_id = Column(BigInteger, nullable=False, comment='学生ID')
     trigger_reason = Column(Text, nullable=False, comment='触发原因')
-    risk_level = Column(String(20), nullable=False, comment='高/中/低')
+    risk_level = Column(String(20), nullable=False, comment='high/medium/low/none')
     alert_source = Column(String(50), default='聊天对话', comment='预警来源')
     status = Column(String(20), default='未处理', comment='处理状态')
     teacher_id = Column(BigInteger, comment='负责老师ID')

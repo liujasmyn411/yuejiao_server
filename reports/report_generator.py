@@ -256,8 +256,8 @@ class ReportGenerator:
         data_summary = {
             "周期": f"{week_start} ~ {today}",
             "本周预警数": len(alerts),
-            "高危预警数": sum(1 for a in alerts if a.risk_level == "高"),
-            "中危预警数": sum(1 for a in alerts if a.risk_level == "中"),
+            "高危预警数": sum(1 for a in alerts if a.risk_level == "high"),
+            "中危预警数": sum(1 for a in alerts if a.risk_level == "medium"),
             "高危学生数": len(high_risk_students),
             "全局风险学生数": len(profiles),
         }

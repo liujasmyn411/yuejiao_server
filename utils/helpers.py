@@ -284,7 +284,7 @@ def nl2sql(natural_lang: str, table_schema: str = "") -> dict:
     # 心理预警查询
     if any(kw in text for kw in ["预警", "心理", "风险", "alert"]):
         if any(kw in text for kw in ["高危", "高风险", "高"]):
-            return {"sql": "SELECT * FROM student_psych_alert WHERE risk_level='高' ORDER BY create_time DESC", "type": "SELECT", "params": [], "safe": True}
+            return {"sql": "SELECT * FROM student_psych_alert WHERE risk_level='high' ORDER BY create_time DESC", "type": "SELECT", "params": [], "safe": True}
         return {"sql": "SELECT * FROM student_psych_alert ORDER BY create_time DESC LIMIT 30", "type": "SELECT", "params": [], "safe": True}
 
     return {"sql": "", "type": "CLARIFY", "params": [], "safe": True, "error": "未能理解查询意图，请尝试：查客户、查活动、查日报、查成绩、查请假、查投诉、查预警"}
@@ -392,13 +392,13 @@ def emotion_analyzer(dialogue_history: str) -> dict:
     medium_triggers = [kw for kw in MEDIUM_RISK_KEYWORDS if kw in text]
 
     if high_triggers:
-        score = 10 + max(0, 20 - len(high_triggers) * 5); level = "高"
+        score = 10 + max(0, 20 - len(high_triggers) * 5); level = "high"
     elif medium_triggers:
-        score = 30 + max(0, 40 - len(medium_triggers) * 5); level = "中" if len(medium_triggers) >= 3 else "低"
+        score = 30 + max(0, 40 - len(medium_triggers) * 5); level = "medium" if len(medium_triggers) >= 3 else "low"
     elif any(kw in text for kw in LOW_POSITIVE):
-        score = 70 + min(30, len([k for k in LOW_POSITIVE if k in text]) * 10); level = "无"
+        score = 70 + min(30, len([k for k in LOW_POSITIVE if k in text]) * 10); level = "none"
     else:
-        score = 50; level = "低"
+        score = 50; level = "low"
 
     score = max(0, min(100, score))
     if score < 30: tag = "严重焦虑/抑郁"
@@ -407,9 +407,9 @@ def emotion_analyzer(dialogue_history: str) -> dict:
     elif score < 85: tag = "平稳"
     else: tag = "积极"
 
-    if level == "高": suggestion = "⚠️ 高危预警：建议老师5分钟内联系学生，必要时启动紧急干预"
-    elif level == "中": suggestion = "⚡ 中危关注：建议老师1小时内与学生沟通，了解具体情况"
-    elif level == "低": suggestion = "💛 低危观察：建议近期多关注该学生情绪变化"
+    if level == "high": suggestion = "⚠️ 高危预警：建议老师5分钟内联系学生，必要时启动紧急干预"
+    elif level == "medium": suggestion = "⚡ 中危关注：建议老师1小时内与学生沟通，了解具体情况"
+    elif level == "low": suggestion = "💛 低危观察：建议近期多关注该学生情绪变化"
     else: suggestion = "✅ 情绪状态良好，继续保持关怀"
 
     return {
@@ -433,11 +433,11 @@ def psych_report_generator(week_start: str = "", db_session=None) -> dict:
         StudentPsychAlert.create_time <= week_end + " 23:59:59"
     ).all()
 
-    risk_summary = {"高": 0, "中": 0, "低": 0, "无": 0}
+    risk_summary = {"high": 0, "medium": 0, "low": 0, "none": 0}
     high_risk_list = []
     for alert in alerts:
         risk_summary[alert.risk_level] = risk_summary.get(alert.risk_level, 0) + 1
-        if alert.risk_level == "高":
+        if alert.risk_level == "high":
             student = db_session.query(SysUser).filter(SysUser.id == alert.student_id).first()
             high_risk_list.append({"student_id": alert.student_id, "name": student.real_name if student else "未知",
                                    "reason": alert.trigger_reason[:50] + "..." if len(alert.trigger_reason) > 50 else alert.trigger_reason})
@@ -446,8 +446,8 @@ def psych_report_generator(week_start: str = "", db_session=None) -> dict:
     emotion_trend = [p.emotion_score or 50 for p in profiles]
 
     recommendations = []
-    if risk_summary["高"] > 0: recommendations.append(f"本周有{risk_summary['高']}个高危预警，建议立即安排老师一对一跟进")
-    if risk_summary["中"] > 0: recommendations.append(f"有{risk_summary['中']}个中危案例，建议在本周内完成沟通")
+    if risk_summary["high"] > 0: recommendations.append(f"本周有{risk_summary['high']}个高危预警，建议立即安排老师一对一跟进")
+    if risk_summary["medium"] > 0: recommendations.append(f"有{risk_summary['medium']}个中危案例，建议在本周内完成沟通")
     avg_score = sum(emotion_trend) / len(emotion_trend) if emotion_trend else 50
     if avg_score < 50: recommendations.append(f"本周平均情绪分{avg_score:.0f}，整体偏低，建议组织集体活动缓解压力")
 

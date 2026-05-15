@@ -123,7 +123,7 @@ CREATE TABLE student_psych_alert (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     student_id BIGINT NOT NULL COMMENT '学生ID',
     trigger_reason TEXT NOT NULL COMMENT '触发原因',
-    risk_level VARCHAR(20) NOT NULL COMMENT '高/中/低',
+    risk_level VARCHAR(20) NOT NULL COMMENT 'high/medium/low/none',
     alert_source VARCHAR(50) DEFAULT '聊天对话' COMMENT '预警来源',
     status VARCHAR(20) DEFAULT '未处理' COMMENT '处理状态',
     teacher_id BIGINT DEFAULT NULL COMMENT '负责老师ID',
