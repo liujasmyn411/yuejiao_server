@@ -368,3 +368,59 @@ class EventRegistrationSchema(BaseSchema):
     create_time: Optional[datetime] = None
     delete_flag: Optional[int] = 0
     remark: Optional[str] = None
+
+
+# ==================== 表12：学生教务信息表 ====================
+class StudentAcademicSchema(BaseSchema):
+    id: Optional[int] = None
+    student_id: Optional[int] = None
+    course_name: Optional[str] = None
+    academic_type: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    exam_location: Optional[str] = None
+    deadline: Optional[datetime] = None
+    duration_minutes: Optional[int] = None
+    semester: Optional[str] = None
+    ddl_status: Optional[str] = "未完成"
+    remind_enabled: Optional[int] = 1
+    remind_days_before: Optional[str] = "7,1"
+    last_remind_time: Optional[datetime] = None
+    create_time: Optional[datetime] = None
+    update_time: Optional[datetime] = None
+    delete_flag: Optional[int] = 0
+    remark: Optional[str] = None
+
+
+class AcademicQueryRequest(BaseModel):
+    """教务查询请求"""
+    student_id: int
+    academic_type: Optional[str] = None  # 考试/论文/作业/项目，不传则查全部
+
+
+# ==================== 表13：留学业务进度追踪表 ====================
+class StudentStudyAbroadProgressSchema(BaseSchema):
+    id: Optional[int] = None
+    student_id: Optional[int] = None
+    target_country: Optional[str] = None
+    target_school: Optional[str] = None
+    target_major: Optional[str] = None
+    degree_level: Optional[str] = None
+    stage: Optional[str] = None
+    stage_order: Optional[int] = None
+    stage_status: Optional[str] = "待开始"
+    stage_detail: Optional[str] = None
+    handler_name: Optional[str] = None
+    handler_contact: Optional[str] = None
+    estimated_complete_date: Optional[str] = None
+    actual_complete_date: Optional[str] = None
+    is_current: Optional[int] = 0
+    create_time: Optional[datetime] = None
+    update_time: Optional[datetime] = None
+    delete_flag: Optional[int] = 0
+    remark: Optional[str] = None
+
+
+class StudyAbroadQueryRequest(BaseModel):
+    """留学进度查询请求"""
+    student_id: int

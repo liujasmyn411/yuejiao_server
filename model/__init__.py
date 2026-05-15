@@ -11,6 +11,8 @@ from model.model import (
     CourseProject,
     EventLecture,
     EventRegistration,
+    StudentAcademic,
+    StudentStudyAbroadProgress,
 )
 
 __all__ = [
@@ -26,4 +28,6 @@ __all__ = [
     "CourseProject",
     "EventLecture",
     "EventRegistration",
+    "StudentAcademic",
+    "StudentStudyAbroadProgress",
 ]

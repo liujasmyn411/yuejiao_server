@@ -220,3 +220,50 @@ class EventRegistration(Base):
     create_time = Column(DateTime, default=datetime.now, comment='创建时间')
     delete_flag = Column(SmallInteger, default=0, comment='软删除')
     remark = Column(Text, comment='备注')
+
+
+# ========== 表12：学生教务信息表 ==========
+class StudentAcademic(Base):
+    __tablename__ = "student_academic"
+    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    student_id = Column(BigInteger, nullable=False, comment='学生ID')
+    course_name = Column(String(100), nullable=False, comment='课程名称')
+    academic_type = Column(String(30), nullable=False, comment='类型：考试/论文/作业/项目')
+    title = Column(String(200), nullable=False, comment='考试/作业标题')
+    description = Column(Text, comment='详细描述')
+    exam_location = Column(String(200), comment='考试地点')
+    deadline = Column(DateTime, nullable=False, comment='考试时间/截止日期')
+    duration_minutes = Column(Integer, comment='考试时长（分钟）')
+    semester = Column(String(30), comment='学期')
+    ddl_status = Column(String(20), default='未完成', comment='完成状态：未完成/已完成/已逾期')
+    remind_enabled = Column(SmallInteger, default=1, comment='是否开启提醒')
+    remind_days_before = Column(String(30), default='7,1', comment='提前提醒天数')
+    last_remind_time = Column(DateTime, comment='最近一次提醒时间')
+    create_time = Column(DateTime, default=datetime.now, comment='创建时间')
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
+    delete_flag = Column(SmallInteger, default=0, comment='软删除')
+    remark = Column(Text, comment='备注')
+
+
+# ========== 表13：留学业务进度追踪表 ==========
+class StudentStudyAbroadProgress(Base):
+    __tablename__ = "student_study_abroad_progress"
+    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    student_id = Column(BigInteger, nullable=False, comment='学生ID')
+    target_country = Column(String(50), nullable=False, comment='目标国家')
+    target_school = Column(String(200), nullable=False, comment='目标院校')
+    target_major = Column(String(200), comment='目标专业')
+    degree_level = Column(String(30), comment='学位：本科/硕士/博士')
+    stage = Column(String(50), nullable=False, comment='当前阶段')
+    stage_order = Column(Integer, nullable=False, comment='阶段序号 1-7')
+    stage_status = Column(String(30), default='待开始', comment='阶段状态')
+    stage_detail = Column(Text, comment='阶段详情/备注')
+    handler_name = Column(String(30), comment='负责人姓名')
+    handler_contact = Column(String(50), comment='负责人联系方式')
+    estimated_complete_date = Column(Date, comment='预计完成日期')
+    actual_complete_date = Column(Date, comment='实际完成日期')
+    is_current = Column(SmallInteger, default=0, comment='是否为当前进行中阶段')
+    create_time = Column(DateTime, default=datetime.now, comment='创建时间')
+    update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
+    delete_flag = Column(SmallInteger, default=0, comment='软删除')
+    remark = Column(Text, comment='备注')

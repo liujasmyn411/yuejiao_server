@@ -11,10 +11,11 @@ from model import (
     SysUser, EventLecture, EventRegistration, CourseProject,
     CrmLead, EmployeeDailyReport, StudentScore,
     StudentAdminService, StudentPsychProfile, StudentPsychAlert,
-    StudentFeedbackTicket
+    StudentFeedbackTicket, StudentAcademic, StudentStudyAbroadProgress
 )
 from schemas import (
-    LeaveCreateRequest, FeedbackCreateRequest, PsychAlertCreateRequest
+    LeaveCreateRequest, FeedbackCreateRequest, PsychAlertCreateRequest,
+    AcademicQueryRequest, StudyAbroadQueryRequest
 )
 
 
@@ -311,6 +312,56 @@ class PsychAlertCRUD:
                 last_interaction_time=datetime.now()
             )
             db.add(new_profile)
+
+
+class AcademicCRUD:
+    """学生教务信息数据访问对象"""
+
+    @staticmethod
+    def get_by_student(db: Session, student_id: int, academic_type: str = ""):
+        """查询学生教务信息"""
+        query = db.query(StudentAcademic).filter(
+            StudentAcademic.student_id == student_id,
+            StudentAcademic.delete_flag == 0
+        )
+        if academic_type:
+            query = query.filter(StudentAcademic.academic_type == academic_type)
+        return query.order_by(StudentAcademic.deadline.asc()).all()
+
+    @staticmethod
+    def get_upcoming(db: Session, student_id: int, days: int = 14):
+        """查询即将到来的DDL（未来N天内）"""
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        cutoff = now + timedelta(days=days)
+        return db.query(StudentAcademic).filter(
+            StudentAcademic.student_id == student_id,
+            StudentAcademic.deadline >= now,
+            StudentAcademic.deadline <= cutoff,
+            StudentAcademic.ddl_status == "未完成",
+            StudentAcademic.delete_flag == 0
+        ).order_by(StudentAcademic.deadline.asc()).all()
+
+
+class StudyAbroadCRUD:
+    """留学业务进度数据访问对象"""
+
+    @staticmethod
+    def get_by_student(db: Session, student_id: int):
+        """查询学生留学进度（按阶段顺序排列）"""
+        return db.query(StudentStudyAbroadProgress).filter(
+            StudentStudyAbroadProgress.student_id == student_id,
+            StudentStudyAbroadProgress.delete_flag == 0
+        ).order_by(StudentStudyAbroadProgress.stage_order.asc()).all()
+
+    @staticmethod
+    def get_current_stage(db: Session, student_id: int):
+        """查询学生当前所处阶段"""
+        return db.query(StudentStudyAbroadProgress).filter(
+            StudentStudyAbroadProgress.student_id == student_id,
+            StudentStudyAbroadProgress.is_current == 1,
+            StudentStudyAbroadProgress.delete_flag == 0
+        ).first()
 
 
 class DashboardCRUD:

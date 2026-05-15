@@ -1,21 +1,22 @@
 -- =============================================
 -- 粤教服务AI Agent系统 · MySQL 完整版
--- 包含：建表语句 + 真实测试数据
+-- 包含：13张表建表语句 + 真实测试数据
 -- 字符集：utf8mb4  存储引擎：InnoDB
--- 生成日期：2026-05-13
+-- 版本：v2.0 · 可直接 source 执行
+-- 用法：mysql -u root -p < yuejiao.sql
+-- 生成日期：2026-05-15
 -- =============================================
 
+CREATE DATABASE IF NOT EXISTS yuejiao
+    DEFAULT CHARACTER SET utf8mb4
+    DEFAULT COLLATE utf8mb4_unicode_ci;
 
+USE yuejiao;
+
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
 -- 1. 统一用户表（学生/员工）
-
-
--- =============================================
--- 粤教服务AI Agent系统 · MySQL 完整版建表语句
--- 字符集：utf8mb4（支持表情） 存储引擎：InnoDB
--- 版本：最终版 · 可直接生产使用
--- =============================================
-use yuejiao;
--- 1. 统一用户表（学生/员工）
+DROP TABLE IF EXISTS sys_user;
 CREATE TABLE sys_user (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     username VARCHAR(50) NOT NULL UNIQUE COMMENT '登录账号',
@@ -55,6 +56,7 @@ INSERT INTO sys_user (id, username, password_hash, real_name, user_type, employe
 
 
 -- 2.学生行政服务（请假/考务）
+DROP TABLE IF EXISTS student_admin_service;
 CREATE TABLE student_admin_service (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     student_id BIGINT NOT NULL COMMENT '学生ID',
@@ -88,6 +90,7 @@ INSERT INTO student_admin_service (id, student_id, service_type, leave_type, sta
 
 
 -- 3.学生心理健康画像
+DROP TABLE IF EXISTS student_psych_profile;
 CREATE TABLE student_psych_profile (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     student_id BIGINT NOT NULL UNIQUE COMMENT '学生ID',
@@ -115,6 +118,7 @@ INSERT INTO student_psych_profile (id, student_id, latest_emotion_tag, emotion_s
 
 
 -- 4.心理预警记录表
+DROP TABLE IF EXISTS student_psych_alert;
 CREATE TABLE student_psych_alert (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     student_id BIGINT NOT NULL COMMENT '学生ID',
@@ -142,6 +146,7 @@ INSERT INTO student_psych_alert (id, student_id, trigger_reason, risk_level, ale
 
 
 -- 5.学生反馈工单
+DROP TABLE IF EXISTS student_feedback_ticket;
 CREATE TABLE student_feedback_ticket (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     student_id BIGINT NOT NULL COMMENT '学生ID',
@@ -173,6 +178,7 @@ INSERT INTO student_feedback_ticket (id, student_id, feedback_type, content, det
 
 
 -- 6.意向客户表（CRM核心）
+DROP TABLE IF EXISTS crm_lead;
 CREATE TABLE crm_lead (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     customer_name VARCHAR(30) NOT NULL COMMENT '客户姓名',
@@ -199,8 +205,6 @@ CREATE TABLE crm_lead (
     INDEX idx_delete_flag (delete_flag)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='意向客户表';
 
-TRUNCATE TABLE crm_lead;
-
 -- 6. 意向客户表（CRM核心） 测试数据
 INSERT INTO crm_lead (id, customer_name, contact_info, age, education, intended_country, intended_major, family_finance, language_level, background_info, follow_up_history, status, source_channel, next_follow_time, score, owner_employee_id, create_time, update_time, delete_flag, remark) VALUES
 (1, '刘浩然', '13800138002', 19, '高中在读', '英国', '计算机科学', '中产', '雅思6.0（备考中）', '对AI和机器学习方向感兴趣，参加过信息学奥赛省级二等奖', '[{"date":"2026-05-08","content":"初次电话沟通，家长陪同，意向明确"}]', '高意向', '校园开放日', '2026-05-20 10:00:00', 78, 3, '2026-05-08 14:00:00', '2026-05-12 16:30:00', 0, '家长重视就业前景'),
@@ -213,6 +217,7 @@ INSERT INTO crm_lead (id, customer_name, contact_info, age, education, intended_
 
 
 -- 7.员工日报表
+DROP TABLE IF EXISTS employee_daily_report;
 CREATE TABLE employee_daily_report (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     employee_id BIGINT NOT NULL COMMENT '员工ID',
@@ -228,8 +233,6 @@ CREATE TABLE employee_daily_report (
     INDEX idx_report_date (report_date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='员工日报表';
 
-TRUNCATE TABLE employee_daily_report;
-
 -- 7. 员工日报表 测试数据
 INSERT INTO employee_daily_report (id, employee_id, report_date, work_type, content, summary, report_status, create_time, delete_flag, remark) VALUES
 (1, 3, '2026-05-12', '客户接待', '今日接待意向客户3组：刘浩然（英国计算机）、何静怡（美国心理学）、黄嘉欣（新加坡商科）。刘浩然家长对就业数据很关注，已发送往届就业报告；何静怡要求推荐Top50院校，已整理NYU和UCLA申请要求；黄嘉欣计划参加夏校，已推送报名链接。', '今日完成3组高意向客户深度咨询，重点跟进刘浩然和何静怡的院校匹配方案', '已提交', '2026-05-12 18:30:00', 0, NULL),
@@ -241,6 +244,7 @@ INSERT INTO employee_daily_report (id, employee_id, report_date, work_type, cont
 
 
 -- 8.学生成绩表
+DROP TABLE IF EXISTS student_score;
 CREATE TABLE student_score (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     student_id BIGINT NOT NULL COMMENT '学生ID',
@@ -257,8 +261,6 @@ CREATE TABLE student_score (
     remark TEXT DEFAULT NULL COMMENT '备注',
     INDEX idx_student_id (student_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学生成绩表';
-
-TRUNCATE TABLE course_project;
 
 -- 8. 学生成绩表 测试数据
 INSERT INTO student_score (id, student_id, course_name, score, total_score, pass_score, exam_type, exam_time, semester, teacher_id, create_time, delete_flag, remark) VALUES
@@ -277,6 +279,7 @@ INSERT INTO student_score (id, student_id, course_name, score, total_score, pass
 
 
 -- 9.课程项目表（留学项目）
+DROP TABLE IF EXISTS course_project;
 CREATE TABLE course_project (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     project_name VARCHAR(100) NOT NULL COMMENT '项目名称',
@@ -293,8 +296,6 @@ CREATE TABLE course_project (
     remark TEXT DEFAULT NULL COMMENT '备注'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程项目表';
 
-TRUNCATE TABLE course_project;
-
 -- 9. 课程项目表（留学项目） 测试数据
 INSERT INTO course_project (id, project_name, category, country, tuition_fee, duration, description, target_audience, application_require, is_recommended, sort_order, delete_flag, remark) VALUES
 (1, '英国G5名校计算机硕士直通车', '硕士', '英国', '£35,000-£45,000/年', '1年', '针对985/211及优秀双非院校学生，提供牛津、剑桥、帝国理工、UCL、LSE计算机及相关专业硕士申请全流程服务，含文书指导、面试培训、签证办理。', '计算机、软件工程、人工智能等相关专业本科生，GPA3.5+，雅思6.5+', '本科相关专业，GPA3.5/4.0以上，雅思总分6.5（单项不低于6.0），需提交个人陈述和推荐信', 1, 1, 0, '热门项目，每年限招30人'),
@@ -308,6 +309,7 @@ INSERT INTO course_project (id, project_name, category, country, tuition_fee, du
 
 
 -- 10.活动讲座表
+DROP TABLE IF EXISTS event_lecture;
 CREATE TABLE event_lecture (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     event_name VARCHAR(100) NOT NULL COMMENT '活动名称',
@@ -327,8 +329,6 @@ CREATE TABLE event_lecture (
     INDEX idx_creator_id (creator_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='活动讲座表';
 
-TRUNCATE TABLE event_lecture;
-
 -- 10. 活动讲座表 测试数据
 INSERT INTO event_lecture (id, event_name, event_type, speaker, cover_image, start_time, location, registration_end_time, max_participants, current_participants, event_status, creator_id, create_time, delete_flag, remark) VALUES
 (1, '2026秋季英国留学申请全攻略', '线上', '王强', 'https://cdn.yuejiao.edu/events/uk-fall-2026.jpg', '2026-05-18 19:00:00', '腾讯会议：123-456-789', '2026-05-17 18:00:00', 200, 156, '报名中', 3, '2026-05-10 10:00:00', 0, '面向计划2026年秋季入学的学生'),
@@ -341,6 +341,7 @@ INSERT INTO event_lecture (id, event_name, event_type, speaker, cover_image, sta
 
 
 -- 11.活动报名表
+DROP TABLE IF EXISTS event_registration;
 CREATE TABLE event_registration (
     id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
     event_id BIGINT NOT NULL COMMENT '活动ID',
@@ -369,3 +370,100 @@ INSERT INTO event_registration (id, event_id, customer_id, customer_name, contac
 (8, 5, 4, '何静怡', '13500135002', '已报名', 0, NULL, '2026-05-14 10:00:00', 0, NULL),
 (9, 6, 7, '吴志强', '13912345680', '已报名', 0, NULL, '2026-05-14 11:00:00', 0, '携带作品集原件'),
 (10, 6, 1, '刘浩然', '13800138002', '已报名', 0, NULL, '2026-05-14 12:00:00', 0, '对动漫设计也有兴趣');
+
+
+
+-- =============================================
+-- 12.学生教务信息表（论文DDL / 考试时间等）
+-- =============================================
+DROP TABLE IF EXISTS student_academic;
+CREATE TABLE student_academic (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    student_id BIGINT NOT NULL COMMENT '学生ID',
+    course_name VARCHAR(100) NOT NULL COMMENT '课程名称',
+    academic_type VARCHAR(30) NOT NULL COMMENT '类型：考试/论文/作业/项目',
+    title VARCHAR(200) NOT NULL COMMENT '考试/作业标题',
+    description TEXT DEFAULT NULL COMMENT '详细描述',
+    exam_location VARCHAR(200) DEFAULT NULL COMMENT '考试地点（仅考试类）',
+    deadline DATETIME NOT NULL COMMENT '考试时间/截止日期',
+    duration_minutes INT DEFAULT NULL COMMENT '考试时长（分钟，仅考试类）',
+    semester VARCHAR(30) DEFAULT NULL COMMENT '学期',
+    ddl_status VARCHAR(20) DEFAULT '未完成' COMMENT '完成状态：未完成/已完成/已逾期',
+    remind_enabled TINYINT DEFAULT 1 COMMENT '是否开启提醒 0=否 1=是',
+    remind_days_before VARCHAR(30) DEFAULT '7,1' COMMENT '提前提醒天数，逗号分隔',
+    last_remind_time DATETIME DEFAULT NULL COMMENT '最近一次提醒时间',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    delete_flag TINYINT DEFAULT 0 COMMENT '软删除',
+    remark TEXT DEFAULT NULL COMMENT '备注',
+    INDEX idx_student_id (student_id),
+    INDEX idx_deadline (deadline),
+    INDEX idx_ddl_status (ddl_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='学生教务信息表';
+
+-- 12. 学生教务信息表 测试数据
+INSERT INTO student_academic (id, student_id, course_name, academic_type, title, description, exam_location, deadline, duration_minutes, semester, ddl_status, remind_enabled, remind_days_before, last_remind_time, create_time, update_time, delete_flag, remark) VALUES
+(1, 4, '高等数学（下）', '考试', '高等数学（下）期末考试', '涵盖微积分、线性代数，闭卷笔试', '教学楼A301', '2026-06-20 09:00:00', 120, '2025-2026第二学期', '未完成', 1, '7,1', NULL, '2026-03-01 08:00:00', '2026-03-01 08:00:00', 0, '占期末总评60%'),
+(2, 4, 'Python程序设计', '项目', '图书管理系统大作业', '独立完成一个带GUI的图书管理系统，含增删改查、借阅功能', NULL, '2026-06-10 23:59:00', NULL, '2025-2026第二学期', '未完成', 1, '14,3', NULL, '2026-04-15 10:00:00', '2026-04-15 10:00:00', 0, '允许组队，最多3人'),
+(3, 4, '大学英语', '论文', '跨文化交际课程论文', '3000词英文论文，主题自选，格式APA，查重率<20%', NULL, '2026-06-05 23:59:00', NULL, '2025-2026第二学期', '未完成', 1, '14,3,1', '2026-05-22 09:00:00', '2026-03-20 14:00:00', '2026-05-22 09:00:00', 0, '已提醒1次'),
+(4, 5, '综合英语', '考试', '综合英语期末考试', '听力+阅读+写作+翻译，闭卷', '教学楼B102', '2026-06-18 14:00:00', 150, '2025-2026第二学期', '未完成', 1, '7,1', NULL, '2026-03-01 08:00:00', '2026-03-01 08:00:00', 0, '占期末总评50%'),
+(5, 5, '英语听力', '考试', '英语听力期末考试', '包括对话理解、讲座笔记、听写，机考', '语音室C201', '2026-06-22 10:00:00', 90, '2025-2026第二学期', '未完成', 1, '7,1', NULL, '2026-03-05 09:00:00', '2026-03-05 09:00:00', 0, '需携带耳机'),
+(6, 5, '英美文学', '论文', '英美文学期末论文', '2000词英文论文，分析一部指定小说', NULL, '2026-06-12 23:59:00', NULL, '2025-2026第二学期', '未完成', 1, '14,3', '2026-05-29 09:00:00', '2026-03-15 11:00:00', '2026-05-29 09:00:00', 0, '已提醒1次'),
+(7, 6, '宏观经济学', '考试', '宏观经济学缓考', '因与雅思考试冲突，申请缓考', '教学楼A201', '2026-06-25 09:00:00', 120, '2025-2026第二学期', '未完成', 1, '7,1', NULL, '2026-05-09 11:00:00', '2026-05-09 11:00:00', 0, '缓考已批准'),
+(8, 6, '国际贸易实务', '项目', '国际贸易模拟谈判', '分组模拟国际贸易谈判，提交谈判记录与分析报告', NULL, '2026-06-08 18:00:00', NULL, '2025-2026第二学期', '未完成', 1, '7,1', NULL, '2026-04-10 09:00:00', '2026-04-10 09:00:00', 0, '4人一组'),
+(9, 6, '计量经济学', '论文', '计量经济学实证论文', '运用Stata进行数据分析，撰写实证论文5000字', NULL, '2026-06-15 23:59:00', NULL, '2025-2026第二学期', '未完成', 1, '14,3,1', NULL, '2026-04-05 14:00:00', '2026-04-05 14:00:00', 0, '需提交数据和代码'),
+(10, 8, '设计素描', '作业', '期末作品集提交', '提交本学期10幅素描作品电子版+纸质版', NULL, '2026-06-08 17:00:00', NULL, '2025-2026第二学期', '未完成', 1, '7,3,1', '2026-06-01 10:00:00', '2026-03-10 10:00:00', '2026-06-01 10:00:00', 0, '纸质版交至艺术学院办公室'),
+(11, 8, '色彩构成', '考试', '色彩构成期末考核', '现场命题创作，水粉/水彩/丙烯任选', '美术楼D101', '2026-06-20 09:00:00', 180, '2025-2026第二学期', '未完成', 1, '7,1', NULL, '2026-03-10 10:00:00', '2026-03-10 10:00:00', 0, '自备画材'),
+(12, 4, '软件工程概论', '考试', '软件工程概论期末考', '选择题+简答题+案例分析', '教学楼A303', '2026-04-15 09:00:00', 120, '2025-2026第二学期', '已完成', 1, '7,1', '2026-04-08 09:00:00', '2026-02-20 08:00:00', '2026-04-15 11:00:00', 0, '成绩已公布：88分');
+
+
+-- =============================================
+-- 13.留学业务进度追踪表（文书/申请/签证）
+-- =============================================
+DROP TABLE IF EXISTS student_study_abroad_progress;
+CREATE TABLE student_study_abroad_progress (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    student_id BIGINT NOT NULL COMMENT '学生ID',
+    target_country VARCHAR(50) NOT NULL COMMENT '目标国家',
+    target_school VARCHAR(200) NOT NULL COMMENT '目标院校',
+    target_major VARCHAR(200) DEFAULT NULL COMMENT '目标专业',
+    degree_level VARCHAR(30) DEFAULT NULL COMMENT '学位：本科/硕士/博士',
+    stage VARCHAR(50) NOT NULL COMMENT '当前阶段：文书准备/文书审核/院校申请/院校反馈/录取结果/签证办理/行前准备',
+    stage_order INT NOT NULL COMMENT '阶段序号 1-7',
+    stage_status VARCHAR(30) DEFAULT '待开始' COMMENT '阶段状态：待开始/进行中/已完成',
+    stage_detail TEXT DEFAULT NULL COMMENT '阶段详情/备注',
+    handler_name VARCHAR(30) DEFAULT NULL COMMENT '负责人姓名',
+    handler_contact VARCHAR(50) DEFAULT NULL COMMENT '负责人联系方式',
+    estimated_complete_date DATE DEFAULT NULL COMMENT '预计完成日期',
+    actual_complete_date DATE DEFAULT NULL COMMENT '实际完成日期',
+    is_current TINYINT DEFAULT 0 COMMENT '是否为当前进行中阶段 0=否 1=是',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    delete_flag TINYINT DEFAULT 0 COMMENT '软删除',
+    remark TEXT DEFAULT NULL COMMENT '备注',
+    INDEX idx_student_id (student_id),
+    INDEX idx_stage (stage),
+    INDEX idx_is_current (is_current)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='留学业务进度追踪表';
+
+-- 13. 留学业务进度追踪表 测试数据
+INSERT INTO student_study_abroad_progress (id, student_id, target_country, target_school, target_major, degree_level, stage, stage_order, stage_status, stage_detail, handler_name, handler_contact, estimated_complete_date, actual_complete_date, is_current, create_time, update_time, delete_flag, remark) VALUES
+(1, 4, '英国', '帝国理工学院', '计算机科学', '硕士', '文书准备', 1, '已完成', '个人陈述初稿已完成，推荐信已联系2位教授，简历已更新至最新版本', '王强', 'wangqiang@yuejiao.edu / 13798765432', '2026-05-10', '2026-05-08', 0, '2026-04-01 10:00:00', '2026-05-08 16:00:00', 0, '文书质量较高'),
+(2, 4, '英国', '帝国理工学院', '计算机科学', '硕士', '文书审核', 2, '已完成', '文书老师已完成一审，修改建议：PS需加强研究经历的描述，推荐信已确认内容无误', '王强', 'wangqiang@yuejiao.edu / 13798765432', '2026-05-15', '2026-05-14', 0, '2026-05-09 09:00:00', '2026-05-14 14:00:00', 0, '二审通过'),
+(3, 4, '英国', '帝国理工学院', '计算机科学', '硕士', '院校申请', 3, '进行中', '已提交帝国理工学院在线申请表，申请费已缴纳，材料完整待审核', '王强', 'wangqiang@yuejiao.edu / 13798765432', '2026-05-30', NULL, 1, '2026-05-15 10:00:00', '2026-05-15 10:00:00', 0, '申请编号：ICL-2026-CS-0042'),
+(4, 5, '新加坡', '新加坡国立大学', '商科', '本科', '文书准备', 1, '已完成', '个人陈述初稿完成，推荐信1封已到位（英语老师），另一封待提交（班主任）', '陈美玲', 'chenml@yuejiao.edu / 13500135001', '2026-05-20', '2026-05-18', 0, '2026-05-01 14:00:00', '2026-05-18 11:00:00', 0, '第二封推荐信需跟进'),
+(5, 5, '新加坡', '新加坡国立大学', '商科', '本科', '文书审核', 2, '进行中', '文书老师已反馈初稿意见：需补充课外活动经历，突出领导力和团队协作能力', '陈美玲', 'chenml@yuejiao.edu / 13500135001', '2026-05-25', NULL, 1, '2026-05-19 09:00:00', '2026-05-19 16:00:00', 0, '修改中'),
+(6, 6, '德国', '慕尼黑工业大学', '机械工程', '硕士', '文书准备', 1, '已完成', '德文简历和动机信已定稿，APS审核材料已提交至审核部', '陈美玲', 'chenml@yuejiao.edu / 13500135001', '2026-05-05', '2026-05-04', 0, '2026-03-15 10:00:00', '2026-05-04 15:00:00', 0, 'APS审核周期约3个月'),
+(7, 6, '德国', '慕尼黑工业大学', '机械工程', '硕士', '文书审核', 2, '已完成', '文书终审通过，德文翻译已确认无误', '陈美玲', 'chenml@yuejiao.edu / 13500135001', '2026-05-12', '2026-05-10', 0, '2026-05-05 09:00:00', '2026-05-10 17:00:00', 0, NULL),
+(8, 6, '德国', '慕尼黑工业大学', '机械工程', '硕士', '院校申请', 3, '进行中', '等待APS审核证书（预计7月中旬出结果），拿到后立即提交大学申请', '陈美玲', 'chenml@yuejiao.edu / 13500135001', '2026-07-20', NULL, 1, '2026-05-11 10:00:00', '2026-05-11 10:00:00', 0, 'APS证书是关键节点'),
+(9, 8, '日本', '京都艺术大学', '视觉传达', '本科', '文书准备', 1, '进行中', '日文个人陈述初稿撰写中，作品集已整理6件（目标8-12件），还需补充2件', '王强', 'wangqiang@yuejiao.edu / 13798765432', '2026-06-15', NULL, 1, '2026-05-10 14:00:00', '2026-05-13 10:00:00', 0, '作品集准备周期较长'),
+(10, 4, '英国', '帝国理工学院', '计算机科学', '硕士', '院校反馈', 4, '待开始', '等待院校审核反馈，预计审核周期4-8周', '王强', 'wangqiang@yuejiao.edu / 13798765432', '2026-07-15', NULL, 0, '2026-05-15 10:00:00', '2026-05-15 10:00:00', 0, '参考往届反馈周期'),
+(11, 4, '英国', '帝国理工学院', '计算机科学', '硕士', '录取结果', 5, '待开始', '等待录取结果发布', '王强', 'wangqiang@yuejiao.edu / 13798765432', '2026-08-15', NULL, 0, '2026-05-15 10:00:00', '2026-05-15 10:00:00', 0, NULL),
+(12, 4, '英国', '帝国理工学院', '计算机科学', '硕士', '签证办理', 6, '待开始', '待收到录取通知后启动签证流程，准备资金证明、体检等材料', '王强', 'wangqiang@yuejiao.edu / 13798765432', '2026-09-01', NULL, 0, '2026-05-15 10:00:00', '2026-05-15 10:00:00', 0, '英国学生签证Tier 4'),
+(13, 4, '英国', '帝国理工学院', '计算机科学', '硕士', '行前准备', 7, '待开始', '机票预订、住宿安排、行前培训、换汇等', '王强', 'wangqiang@yuejiao.edu / 13798765432', '2026-09-15', NULL, 0, '2026-05-15 10:00:00', '2026-05-15 10:00:00', 0, NULL);
+
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- =============================================
+-- 初始化完成！共创建 13 张表 + 测试数据
+-- =============================================

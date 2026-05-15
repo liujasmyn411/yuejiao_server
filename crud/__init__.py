@@ -8,6 +8,8 @@ from crud.student_routes import (
     StudentServiceCRUD,
     FeedbackCRUD,
     PsychAlertCRUD,
+    AcademicCRUD,
+    StudyAbroadCRUD,
     DashboardCRUD,
 )
 
@@ -21,5 +23,7 @@ __all__ = [
     "StudentServiceCRUD",
     "FeedbackCRUD",
     "PsychAlertCRUD",
+    "AcademicCRUD",
+    "StudyAbroadCRUD",
     "DashboardCRUD",
 ]

@@ -13,6 +13,8 @@ from schemas.schemas import (
     LeaveCreateRequest,
     FeedbackCreateRequest,
     PsychAlertCreateRequest,
+    AcademicQueryRequest,
+    StudyAbroadQueryRequest,
     SysUserSchema,
     StudentAdminServiceSchema,
     StudentPsychProfileSchema,
@@ -24,6 +26,8 @@ from schemas.schemas import (
     CourseProjectSchema,
     EventLectureSchema,
     EventRegistrationSchema,
+    StudentAcademicSchema,
+    StudentStudyAbroadProgressSchema,
 )
 
 __all__ = [
@@ -41,6 +45,8 @@ __all__ = [
     "LeaveCreateRequest",
     "FeedbackCreateRequest",
     "PsychAlertCreateRequest",
+    "AcademicQueryRequest",
+    "StudyAbroadQueryRequest",
     "SysUserSchema",
     "StudentAdminServiceSchema",
     "StudentPsychProfileSchema",
@@ -52,4 +58,6 @@ __all__ = [
     "CourseProjectSchema",
     "EventLectureSchema",
     "EventRegistrationSchema",
+    "StudentAcademicSchema",
+    "StudentStudyAbroadProgressSchema",
 ]
