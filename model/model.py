@@ -179,6 +179,8 @@ class CourseProject(Base):
     duration = Column(String(50), comment='学制')
     description = Column(Text, comment='项目介绍')
     target_audience = Column(String(255), comment='适合人群')
+    age_min = Column(Integer, comment='最低年龄要求')
+    age_max = Column(Integer, comment='最高年龄要求')
     application_require = Column(Text, comment='申请要求')
     is_recommended = Column(SmallInteger, default=0, comment='是否推荐 0=否 1=是')
     sort_order = Column(Integer, default=0, comment='排序序号')

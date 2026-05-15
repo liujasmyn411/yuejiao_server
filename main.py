@@ -91,31 +91,31 @@ def init_sample_data():
             projects = [
                 CourseProject(
                     project_name="2+2新加坡定向培养本科班",
-                    category="新加坡-本科",
+                    category="新加坡-本科", country="新加坡",
                     description="初中毕业生可通过2+2学制获得本科文凭，国内2年+新加坡2年，总学费约30-31万",
                     target_audience="应往届初中毕业生，年龄14-16岁"
                 ),
                 CourseProject(
                     project_name="0.5/1+2新加坡定向培养本科班",
-                    category="新加坡-本科",
+                    category="新加坡-本科", country="新加坡",
                     description="高中生可通过0.5/1+2学制快速获得本科文凭，总学费约25-26万",
                     target_audience="高二在读、高中/中职/中技毕业生，年龄16-19岁"
                 ),
                 CourseProject(
                     project_name="6+6酒店运营大专就业班",
-                    category="新加坡-大专",
+                    category="新加坡-大专", country="新加坡",
                     description="6个月理论+6个月带薪实习，一年获大专文凭，就业薪资15000+/月",
                     target_audience="职高/中专/中职/技校学生，年满17岁"
                 ),
                 CourseProject(
                     project_name="9+6航空运营大专就业班",
-                    category="新加坡-大专",
+                    category="新加坡-大专", country="新加坡",
                     description="9个月理论+6个月带薪实习，一年获大专文凭，就业薪资15000+/月",
                     target_audience="职高/中专/中职/技校学生，年满17岁"
                 ),
                 CourseProject(
                     project_name="中德精英人才共建计划",
-                    category="德国-双元制",
+                    category="德国-双元制", country="德国",
                     description="德国双元制职业教育，免学费享补贴，保就业可移民，平均薪资2100-3500欧/月",
                     target_audience="18-35岁，高中及以上学历"
                 ),
