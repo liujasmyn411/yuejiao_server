@@ -16,7 +16,7 @@ os.environ["DB_TYPE"] = "sqlite"
 os.environ["SQLITE_URL"] = "sqlite:///./test.db"
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, BigInteger, Integer
 from sqlalchemy.orm import sessionmaker
 from faker import Faker
 
@@ -30,6 +30,13 @@ test_engine = create_engine(
     connect_args={"check_same_thread": False},
 )
 TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+
+# ── SQLite 兼容 BIGINT → INTEGER ──────────────
+# 原因：SQLite 只有 INTEGER PRIMARY KEY 支持自增，BIGINT PRIMARY KEY 不会
+for table in Base.metadata.tables.values():
+    for col in table.columns:
+        if isinstance(col.type, BigInteger):
+            col.type = Integer()
 
 fake = Faker("zh_CN")
 
@@ -55,7 +62,7 @@ def db_session(engine):
     try:
         yield db
     finally:
-        # 按 FK 依赖逆序清空所有表
+        db.rollback()  # 处理可能存在的 PendingRollbackError
         for table in reversed(Base.metadata.sorted_tables):
             db.execute(table.delete())
         db.commit()
@@ -89,6 +96,18 @@ def client(db_session):
 # 种子数据 fixtures
 # ═══════════════════════════════════════════════
 
+# 预哈希密码（所有测试用户共用）
+from utils.auth import hash_password
+TEST_PASSWORD = "test123456"
+TEST_PASSWORD_HASH = hash_password(TEST_PASSWORD)
+
+
+def _make_auth_headers(user_id: int) -> dict:
+    """为指定用户生成带有 JWT 的 Authorization 请求头。"""
+    from utils.auth import create_access_token
+    token = create_access_token({"sub": str(user_id)})
+    return {"Authorization": f"Bearer {token}"}
+
 
 @pytest.fixture
 def seed_student(db_session):
@@ -97,7 +116,7 @@ def seed_student(db_session):
 
     s = SysUser(
         username="test_student",
-        password_hash="hashed_pw",
+        password_hash=TEST_PASSWORD_HASH,
         real_name="测试学生",
         user_type="STUDENT",
         department="计算机学院",
@@ -113,13 +132,19 @@ def seed_student(db_session):
 
 
 @pytest.fixture
+def auth_headers_student(seed_student):
+    """学生用户的 JWT 认证头。"""
+    return _make_auth_headers(seed_student.id)
+
+
+@pytest.fixture
 def seed_employee(db_session):
     """插入一个测试员工并返回 ORM 对象。"""
     from model import SysUser
 
     e = SysUser(
         username="test_employee",
-        password_hash="hashed_pw",
+        password_hash=TEST_PASSWORD_HASH,
         real_name="测试员工",
         user_type="EMPLOYEE",
         employee_role="留学顾问",
@@ -132,6 +157,12 @@ def seed_employee(db_session):
     db_session.flush()
     db_session.refresh(e)
     return e
+
+
+@pytest.fixture
+def auth_headers_employee(seed_employee):
+    """员工用户的 JWT 认证头。"""
+    return _make_auth_headers(seed_employee.id)
 
 
 @pytest.fixture

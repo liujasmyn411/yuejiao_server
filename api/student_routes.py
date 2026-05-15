@@ -15,6 +15,8 @@ from crud import (
     UserCRUD, StudentServiceCRUD, FeedbackCRUD, PsychAlertCRUD,
     AcademicCRUD, StudyAbroadCRUD
 )
+from utils.auth import get_current_user
+from model import SysUser
 
 
 # ========== 路由定义 ==========
@@ -50,7 +52,7 @@ def get_student_info(student_id: int, db: Session = Depends(get_db)):
 
 # ---- 请假: 提交 ----
 @router.post("/api/student/leave")
-def create_leave(req: LeaveCreateRequest, db: Session = Depends(get_db)):
+def create_leave(req: LeaveCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """学生提交请假申请"""
     _validate_student(req.student_id, db)
     try:
@@ -78,7 +80,7 @@ def list_leaves(student_id: int = 0, db: Session = Depends(get_db)):
 
 # ---- 投诉反馈: 提交 ----
 @router.post("/api/student/feedback")
-def create_feedback(req: FeedbackCreateRequest, db: Session = Depends(get_db)):
+def create_feedback(req: FeedbackCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """学生提交投诉反馈"""
     _validate_student(req.student_id, db)
     ticket = FeedbackCRUD.create(db, req)
@@ -103,7 +105,7 @@ def list_feedback(student_id: int = 0, db: Session = Depends(get_db)):
 
 # ---- 心理预警: 提交 ----
 @router.post("/api/student/psych-alert")
-def create_psych_alert(req: PsychAlertCreateRequest, db: Session = Depends(get_db)):
+def create_psych_alert(req: PsychAlertCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """提交心理预警"""
     _validate_student(req.student_id, db)
     alert = PsychAlertCRUD.create(db, req)

@@ -13,6 +13,8 @@ from schemas import (
 from crud import (
     UserCRUD, CrmCRUD, ReportCRUD, ScoreCRUD, EmployeeCRUD, DashboardCRUD
 )
+from utils.auth import get_current_user
+from model import SysUser
 
 router = APIRouter(prefix="/api/enterprise", tags=["企业智能助手"])
 
@@ -20,7 +22,7 @@ router = APIRouter(prefix="/api/enterprise", tags=["企业智能助手"])
 # ==================== 意向客户管理 ====================
 
 @router.post("/lead")
-def create_lead(req: LeadCreateRequest, db: Session = Depends(get_db)):
+def create_lead(req: LeadCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """录入新意向客户"""
     lead = CrmCRUD.create(db, **req.model_dump(exclude_none=True))
     db.commit()
@@ -46,7 +48,7 @@ def list_leads(status: str = "", db: Session = Depends(get_db)):
 
 
 @router.put("/lead/{lead_id}")
-def update_lead(lead_id: int, req: LeadUpdateRequest, db: Session = Depends(get_db)):
+def update_lead(lead_id: int, req: LeadUpdateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """更新意向客户信息"""
     lead = CrmCRUD.update(db, lead_id, **req.model_dump(exclude_none=True))
     if not lead:
@@ -58,12 +60,12 @@ def update_lead(lead_id: int, req: LeadUpdateRequest, db: Session = Depends(get_
 # ==================== 员工日报 ====================
 
 @router.post("/report")
-def submit_report(req: ReportCreateRequest, db: Session = Depends(get_db)):
+def submit_report(req: ReportCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """提交员工日报"""
     data = req.model_dump(exclude_none=True)
     if not data.get("report_date"):
         from datetime import date
-        data["report_date"] = date.today().strftime("%Y-%m-%d")
+        data["report_date"] = date.today()
     report = ReportCRUD.create(db, **data)
     db.commit()
     return {"success": True, "report_id": report.id, "message": "日报提交成功"}
@@ -87,7 +89,7 @@ def list_reports(employee_id: int = 0, db: Session = Depends(get_db)):
 # ==================== 学生成绩管理 ====================
 
 @router.post("/score")
-def add_score(req: ScoreCreateRequest, db: Session = Depends(get_db)):
+def add_score(req: ScoreCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """录入学生成绩"""
     score = ScoreCRUD.create(db, **req.model_dump(exclude_none=True))
     db.commit()

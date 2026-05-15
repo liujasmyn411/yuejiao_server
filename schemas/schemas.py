@@ -75,9 +75,15 @@ class UserUpdateRequest(BaseModel):
 class EventRegisterRequest(BaseModel):
     """活动报名请求"""
     event_id: int
-    customer_id: Optional[int] = None
+    customer_id: int
     customer_name: str
     contact: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    """登录请求"""
+    username: str
+    password: str
 
 
 class LeadCreateRequest(BaseModel):

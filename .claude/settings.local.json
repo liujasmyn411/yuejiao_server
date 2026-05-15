@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -f d:/yuejiao_agents/test.db)",
+      "Bash(python -m pytest tests/ -v --tb=short)"
+    ]
+  }
+}
