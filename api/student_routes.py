@@ -5,39 +5,21 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
 
 from database import get_db
 from schemas import (
-    EventRegisterRequest, LeadCreateRequest, LeadUpdateRequest,
-    ReportCreateRequest, ScoreCreateRequest, LeaveCreateRequest,
-    FeedbackCreateRequest, PsychAlertCreateRequest,
-    UserCreateRequest, UserUpdateRequest,
-    AcademicQueryRequest, StudyAbroadQueryRequest,
+    LeaveCreateRequest, FeedbackCreateRequest, PsychAlertCreateRequest,
     RiskLevelEnum
 )
 from crud import (
-    UserCRUD, EventCRUD, ProjectCRUD, CrmCRUD, ReportCRUD, ScoreCRUD,
-    StudentServiceCRUD, FeedbackCRUD, PsychAlertCRUD,
-    AcademicCRUD, StudyAbroadCRUD, DashboardCRUD
+    UserCRUD, StudentServiceCRUD, FeedbackCRUD, PsychAlertCRUD,
+    AcademicCRUD, StudyAbroadCRUD
 )
 
 
 # ========== 路由定义 ==========
 
-router = APIRouter()
-
-
-# ---------- 根路径 ----------
-@router.get("/")
-def root():
-    return {"msg": "粤教服务AI Agent API运行中", "status": "ok"}
-
-
-# ---------- 健康检查 ----------
-@router.get("/health")
-def health_check():
-    return {"status": "healthy", "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+router = APIRouter(tags=["学生智能助手"])
 
 # ==================== 学生助手接口 ====================
 
@@ -239,54 +221,3 @@ def student_chat(message: dict, db: Session = Depends(get_db)):
     return result
 
 
-# ==================== 智能报告接口 ====================
-
-@router.get("/api/reports/dashboard")
-def dashboard(db: Session = Depends(get_db)):
-    """管理仪表盘数据"""
-    return DashboardCRUD.get_stats(db)
-
-
-@router.get("/api/reports/customer")
-def customer_report(db: Session = Depends(get_db)):
-    """客户经营分析报告（月报）"""
-    from reports.report_generator import ReportGenerator
-    gen = ReportGenerator()
-    return gen.generate(db, "customer_analysis")
-
-
-@router.get("/api/reports/daily")
-def daily_report(date: str = "", employee_id: int = 0, db: Session = Depends(get_db)):
-    """员工日报汇总"""
-    from reports.report_generator import ReportGenerator
-    gen = ReportGenerator()
-    params = {}
-    if date:
-        params["date"] = date
-    if employee_id:
-        params["employee_id"] = employee_id
-    return gen.generate(db, "daily_summary", params)
-
-
-@router.get("/api/reports/weekly")
-def weekly_report(db: Session = Depends(get_db)):
-    """员工周报汇总"""
-    from reports.report_generator import ReportGenerator
-    gen = ReportGenerator()
-    return gen.generate(db, "weekly_summary")
-
-
-@router.get("/api/reports/psych-weekly")
-def psych_weekly_report(db: Session = Depends(get_db)):
-    """学生心理健康周报"""
-    from reports.report_generator import ReportGenerator
-    gen = ReportGenerator()
-    return gen.generate(db, "psych_weekly")
-
-
-@router.get("/api/reports/complaint-weekly")
-def complaint_weekly_report(db: Session = Depends(get_db)):
-    """投诉处理周报"""
-    from reports.report_generator import ReportGenerator
-    gen = ReportGenerator()
-    return gen.generate(db, "complaint_weekly")
