@@ -12,7 +12,10 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from utils import setup_logging
 from database import get_db, create_tables, SessionLocal
-from model import EventLecture, EventRegistration, CourseProject, CrmLead, EmployeeDailyReport
+from model import (
+    EventLecture, EventRegistration, CourseProject, CrmLead,
+    EmployeeDailyReport, StudentAcademic, StudentStudyAbroadProgress
+)
 from api import router
 from config import settings
 
@@ -48,8 +51,13 @@ def init_sample_data():
 
     db = SessionLocal()
     try:
-        # 检查是否已有数据
-        if db.query(EventLecture).count() == 0:
+        # 检查是否已有数据（任一核心表为空则初始化）
+        has_data = (
+            db.query(EventLecture).count() > 0 and
+            db.query(StudentAcademic).count() > 0 and
+            db.query(StudentStudyAbroadProgress).count() > 0
+        )
+        if not has_data:
             logger.info("正在初始化测试数据...")
 
             # 示例活动
@@ -139,6 +147,74 @@ def init_sample_data():
             ]
             for r in reports:
                 db.add(r)
+
+            # 示例教务数据
+            academics = [
+                StudentAcademic(student_id=4, course_name="高等数学（下）", academic_type="考试",
+                               title="高等数学（下）期末考试", description="涵盖微积分、线性代数，闭卷笔试",
+                               exam_location="教学楼A301",
+                               deadline=datetime(2026, 6, 20, 9, 0), duration_minutes=120,
+                               semester="2025-2026第二学期"),
+                StudentAcademic(student_id=4, course_name="Python程序设计", academic_type="项目",
+                               title="图书管理系统大作业", description="独立完成一个带GUI的图书管理系统",
+                               deadline=datetime(2026, 6, 10, 23, 59),
+                               semester="2025-2026第二学期"),
+                StudentAcademic(student_id=4, course_name="大学英语", academic_type="论文",
+                               title="跨文化交际课程论文", description="3000词英文论文，格式APA",
+                               deadline=datetime(2026, 6, 5, 23, 59),
+                               semester="2025-2026第二学期"),
+                StudentAcademic(student_id=5, course_name="综合英语", academic_type="考试",
+                               title="综合英语期末考试", description="听力+阅读+写作+翻译",
+                               exam_location="教学楼B102",
+                               deadline=datetime(2026, 6, 18, 14, 0), duration_minutes=150,
+                               semester="2025-2026第二学期"),
+            ]
+            for a in academics:
+                db.add(a)
+
+            # 示例留学进度
+            progresses = [
+                StudentStudyAbroadProgress(
+                    student_id=4, target_country="英国", target_school="帝国理工学院",
+                    target_major="计算机科学", degree_level="硕士",
+                    stage="文书准备", stage_order=1, stage_status="已完成",
+                    stage_detail="个人陈述初稿已完成，推荐信已联系2位教授",
+                    handler_name="王强", handler_contact="wangqiang@yuejiao.edu",
+                    estimated_complete_date="2026-05-10", actual_complete_date="2026-05-08",
+                    is_current=0),
+                StudentStudyAbroadProgress(
+                    student_id=4, target_country="英国", target_school="帝国理工学院",
+                    target_major="计算机科学", degree_level="硕士",
+                    stage="文书审核", stage_order=2, stage_status="已完成",
+                    stage_detail="文书老师已完成一审",
+                    handler_name="王强", handler_contact="wangqiang@yuejiao.edu",
+                    estimated_complete_date="2026-05-15", actual_complete_date="2026-05-14",
+                    is_current=0),
+                StudentStudyAbroadProgress(
+                    student_id=4, target_country="英国", target_school="帝国理工学院",
+                    target_major="计算机科学", degree_level="硕士",
+                    stage="院校申请", stage_order=3, stage_status="进行中",
+                    stage_detail="已提交在线申请表，材料完整待审核",
+                    handler_name="王强", handler_contact="wangqiang@yuejiao.edu",
+                    estimated_complete_date="2026-05-30", is_current=1),
+                StudentStudyAbroadProgress(
+                    student_id=5, target_country="新加坡", target_school="新加坡国立大学",
+                    target_major="商科", degree_level="本科",
+                    stage="文书准备", stage_order=1, stage_status="已完成",
+                    stage_detail="个人陈述初稿完成，推荐信1封已到位",
+                    handler_name="陈美玲", handler_contact="chenml@yuejiao.edu",
+                    estimated_complete_date="2026-05-20", actual_complete_date="2026-05-18",
+                    is_current=0),
+                StudentStudyAbroadProgress(
+                    student_id=5, target_country="新加坡", target_school="新加坡国立大学",
+                    target_major="商科", degree_level="本科",
+                    stage="文书审核", stage_order=2, stage_status="进行中",
+                    stage_detail="文书老师已反馈初稿意见，需补充课外活动经历",
+                    handler_name="陈美玲", handler_contact="chenml@yuejiao.edu",
+                    estimated_complete_date="2026-05-25", is_current=1),
+            ]
+            for p in progresses:
+                db.add(p)
 
             db.commit()
             logger.info("测试数据初始化完成")

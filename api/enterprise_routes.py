@@ -135,3 +135,35 @@ def list_employees(db: Session = Depends(get_db)):
 def dashboard(db: Session = Depends(get_db)):
     """企业助手仪表盘"""
     return DashboardCRUD.get_stats(db)
+
+
+# ==================== 企业助手对话接口 ====================
+
+@router.post("/chat")
+def enterprise_chat(message: dict, db: Session = Depends(get_db)):
+    """企业助手对话接口（支持NL2SQL/日报/CRM等）"""
+    from agents.enterprise.agent import EnterpriseAgent
+    agent = EnterpriseAgent()
+    text = message.get("message", "")
+    result = agent.route_intent(text, db=db)
+    return result
+
+
+@router.post("/nl2sql")
+def nl2sql_query(message: dict, db: Session = Depends(get_db)):
+    """自然语言转SQL查询"""
+    from agents.enterprise.agent import EnterpriseAgent
+    agent = EnterpriseAgent()
+    text = message.get("message", "")
+    result = agent.query_database(text, db)
+    return result
+
+
+@router.post("/voice-report")
+def voice_to_report(message: dict):
+    """口述文本 → 结构化日报"""
+    from agents.enterprise.agent import EnterpriseAgent
+    agent = EnterpriseAgent()
+    text = message.get("message", "")
+    report = agent.voice_to_report(text)
+    return {"success": True, "report": report}

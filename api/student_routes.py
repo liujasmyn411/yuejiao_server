@@ -225,9 +225,67 @@ def get_current_stage(student_id: int, db: Session = Depends(get_db)):
     }
 
 
+# ==================== 学生助手对话接口 ====================
+
+@router.post("/api/student/chat")
+def student_chat(message: dict, db: Session = Depends(get_db)):
+    """学生助手对话接口（支持7种意图）"""
+    from agents.student.agent import StudentAgent
+    agent = StudentAgent()
+    text = message.get("message", "")
+    student_id = message.get("student_id")
+    result = agent.route_intent(text, student_id=student_id, db=db)
+    return result
+
+
 # ==================== 智能报告接口 ====================
 
 @router.get("/api/reports/dashboard")
 def dashboard(db: Session = Depends(get_db)):
     """管理仪表盘数据"""
     return DashboardCRUD.get_stats(db)
+
+
+@router.get("/api/reports/customer")
+def customer_report(db: Session = Depends(get_db)):
+    """客户经营分析报告（月报）"""
+    from reports.report_generator import ReportGenerator
+    gen = ReportGenerator()
+    return gen.generate(db, "customer_analysis")
+
+
+@router.get("/api/reports/daily")
+def daily_report(date: str = "", employee_id: int = 0, db: Session = Depends(get_db)):
+    """员工日报汇总"""
+    from reports.report_generator import ReportGenerator
+    gen = ReportGenerator()
+    params = {}
+    if date:
+        params["date"] = date
+    if employee_id:
+        params["employee_id"] = employee_id
+    return gen.generate(db, "daily_summary", params)
+
+
+@router.get("/api/reports/weekly")
+def weekly_report(db: Session = Depends(get_db)):
+    """员工周报汇总"""
+    from reports.report_generator import ReportGenerator
+    gen = ReportGenerator()
+    return gen.generate(db, "weekly_summary")
+
+
+@router.get("/api/reports/psych-weekly")
+def psych_weekly_report(db: Session = Depends(get_db)):
+    """学生心理健康周报"""
+    from reports.report_generator import ReportGenerator
+    gen = ReportGenerator()
+    return gen.generate(db, "psych_weekly")
+
+
+@router.get("/api/reports/complaint-weekly")
+def complaint_weekly_report(db: Session = Depends(get_db)):
+    """投诉处理周报"""
+    from reports.report_generator import ReportGenerator
+    gen = ReportGenerator()
+    return gen.generate(db, "complaint_weekly")

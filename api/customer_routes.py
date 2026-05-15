@@ -128,3 +128,15 @@ def profile_match(age: int = 0, education: str = "", intended_country: str = "",
             })
     matched.sort(key=lambda x: x["match_score"], reverse=True)
     return {"matches": matched[:5]}
+
+
+# ==================== 客服对话接口 ====================
+
+@router.post("/chat")
+def customer_chat(message: dict):
+    """客服Agent对话接口（支持8种意图）"""
+    from agents.customer_service.agent import CustomerServiceAgent
+    agent = CustomerServiceAgent()
+    text = message.get("message", "")
+    result = agent.route_intent(text)
+    return result
