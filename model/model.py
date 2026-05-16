@@ -270,3 +270,35 @@ class StudentStudyAbroadProgress(Base):
     update_time = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment='更新时间')
     delete_flag = Column(SmallInteger, default=0, comment='软删除')
     remark = Column(Text, comment='备注')
+
+
+# ========== 表14：站内通知表 ==========
+class Notification(Base):
+    __tablename__ = "notification"
+    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    recipient_id = Column(BigInteger, nullable=False, comment='接收人ID')
+    title = Column(String(100), nullable=False, comment='通知标题')
+    content = Column(Text, comment='通知内容')
+    notification_type = Column(String(30), comment='leave_approved/leave_rejected/feedback_resolved/system')
+    related_id = Column(BigInteger, comment='关联业务ID')
+    is_read = Column(SmallInteger, default=0, comment='是否已读')
+    create_time = Column(DateTime, default=datetime.now, comment='创建时间')
+    delete_flag = Column(SmallInteger, default=0, comment='软删除')
+    remark = Column(Text, comment='备注')
+
+
+# ========== 表15：组织架构表 ==========
+class OrgDepartment(Base):
+    __tablename__ = "org_department"
+    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    dept_name = Column(String(100), nullable=False, comment='部门名称')
+    parent_id = Column(BigInteger, default=0, comment='上级部门ID，0=顶级')
+    dept_level = Column(SmallInteger, default=1, comment='层级 1=公司 2=部门 3=小组')
+    sort_order = Column(Integer, default=0, comment='排序序号')
+    dept_desc = Column(Text, comment='部门职能描述')
+    manager_id = Column(BigInteger, comment='部门负责人ID')
+    contact_phone = Column(String(20), comment='部门联系电话')
+    contact_email = Column(String(100), comment='部门邮箱')
+    create_time = Column(DateTime, default=datetime.now, comment='创建时间')
+    delete_flag = Column(SmallInteger, default=0, comment='软删除')
+    remark = Column(Text, comment='备注')

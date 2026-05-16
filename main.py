@@ -11,10 +11,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from utils import setup_logging
+from utils.scheduler import start_scheduler
 from database import get_db, create_tables, SessionLocal
 from model import (
     EventLecture, EventRegistration, CourseProject, CrmLead,
-    EmployeeDailyReport, StudentAcademic, StudentStudyAbroadProgress
+    EmployeeDailyReport, StudentAcademic, StudentStudyAbroadProgress,
+    OrgDepartment,
 )
 from api import router
 from config import settings
@@ -30,7 +32,7 @@ app = FastAPI(
     version=settings.api_version
 )
 
-# 允许跨域访问（Dify需要调用这个API）
+# 允许跨域访问
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
@@ -55,7 +57,8 @@ def init_sample_data():
         has_data = (
             db.query(EventLecture).count() > 0 and
             db.query(StudentAcademic).count() > 0 and
-            db.query(StudentStudyAbroadProgress).count() > 0
+            db.query(StudentStudyAbroadProgress).count() > 0 and
+            db.query(OrgDepartment).count() > 0
         )
         if not has_data:
             logger.info("正在初始化测试数据...")
@@ -216,6 +219,38 @@ def init_sample_data():
             for p in progresses:
                 db.add(p)
 
+            # 示例组织架构
+            org_depts = [
+                OrgDepartment(id=1, dept_name="粤教服务", parent_id=0, dept_level=1, sort_order=1,
+                             dept_desc="广东省教育服务有限公司总部", contact_phone="020-37628058",
+                             contact_email="info@yuejiao.edu"),
+                OrgDepartment(id=2, dept_name="市场部", parent_id=1, dept_level=2, sort_order=1,
+                             dept_desc="负责线上线下获客、品牌推广、渠道合作", manager_id=2,
+                             contact_phone="020-37628059", contact_email="marketing@yuejiao.edu"),
+                OrgDepartment(id=3, dept_name="销售部", parent_id=1, dept_level=2, sort_order=2,
+                             dept_desc="负责意向客户跟进、签约转化、客户关系维护", manager_id=1,
+                             contact_phone="020-37628060", contact_email="sales@yuejiao.edu"),
+                OrgDepartment(id=4, dept_name="教务部", parent_id=1, dept_level=2, sort_order=3,
+                             dept_desc="负责课程安排、考试管理、学籍管理、班主任工作", manager_id=3,
+                             contact_phone="020-37628061", contact_email="academic@yuejiao.edu"),
+                OrgDepartment(id=5, dept_name="留学服务部", parent_id=1, dept_level=2, sort_order=4,
+                             dept_desc="负责留学规划、文书辅导、院校申请、签证服务", manager_id=4,
+                             contact_phone="020-37628062", contact_email="abroad@yuejiao.edu"),
+                OrgDepartment(id=6, dept_name="客服部", parent_id=1, dept_level=2, sort_order=5,
+                             dept_desc="负责客户咨询、投诉处理、满意度回访", manager_id=5,
+                             contact_phone="020-37628063", contact_email="cs@yuejiao.edu"),
+                OrgDepartment(id=7, dept_name="线上咨询组", parent_id=2, dept_level=3, sort_order=1,
+                             dept_desc="抖音/公众号/官网等线上渠道咨询转化"),
+                OrgDepartment(id=8, dept_name="线下活动组", parent_id=2, dept_level=3, sort_order=2,
+                             dept_desc="线下说明会/校园讲座/展会等活动策划与执行"),
+                OrgDepartment(id=9, dept_name="新加坡项目组", parent_id=3, dept_level=3, sort_order=1,
+                             dept_desc="专注新加坡留学项目的销售转化"),
+                OrgDepartment(id=10, dept_name="德国项目组", parent_id=3, dept_level=3, sort_order=2,
+                             dept_desc="专注德国双元制项目的销售转化"),
+            ]
+            for d in org_depts:
+                db.add(d)
+
             db.commit()
             logger.info("测试数据初始化完成")
         else:
@@ -231,9 +266,10 @@ def init_sample_data():
 if __name__ == "__main__":
     import uvicorn
 
-    # 启动时创建表+插入测试数据
+    # 启动时创建表+插入测试数据+启动定时任务
     create_tables()
     init_sample_data()
+    start_scheduler()
 
     logger.info("=" * 50)
     logger.info("粤教服务 API 服务启动成功！")

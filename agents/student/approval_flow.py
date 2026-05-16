@@ -97,6 +97,48 @@ class ApprovalFlow:
         )
         return q.order_by(StudentAdminService.create_time.desc()).all()
 
+    def get_pending_by_teacher(self, db, teacher_id: int) -> list[dict]:
+        """班主任查看自己名下学生的待审批列表"""
+        from model import StudentAdminService, SysUser
+
+        students = db.query(SysUser).filter(
+            SysUser.head_teacher_id == teacher_id,
+            SysUser.user_type == "STUDENT",
+            SysUser.delete_flag == 0,
+        ).all()
+        student_ids = [s.id for s in students]
+
+        if not student_ids:
+            return []
+
+        records = (
+            db.query(StudentAdminService)
+            .filter(
+                StudentAdminService.student_id.in_(student_ids),
+                StudentAdminService.status == "待审批",
+                StudentAdminService.delete_flag == 0,
+            )
+            .order_by(StudentAdminService.create_time.desc())
+            .all()
+        )
+
+        student_map = {s.id: s for s in students}
+        return [
+            {
+                "id": r.id,
+                "student_id": r.student_id,
+                "student_name": student_map.get(r.student_id, SysUser()).real_name,
+                "service_type": r.service_type,
+                "leave_type": r.leave_type,
+                "start_time": str(r.start_time) if r.start_time else None,
+                "end_time": str(r.end_time) if r.end_time else None,
+                "reason": r.reason,
+                "status": r.status,
+                "create_time": str(r.create_time),
+            }
+            for r in records
+        ]
+
     def extract_leave_info(self, user_input: str) -> dict:
         """从自然语言中提取请假信息"""
         info = self.llm.extract_info(

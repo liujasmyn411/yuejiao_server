@@ -178,6 +178,12 @@ class RiskLevelEnum(str, Enum):
     none = "none"
 
 
+class FeedbackResolveRequest(BaseModel):
+    """投诉反馈处理请求"""
+    solution: str
+    handle_user_id: int
+
+
 class PsychAlertCreateRequest(BaseModel):
     """心理预警提交请求"""
     student_id: int
@@ -256,6 +262,36 @@ class StudentPsychAlertSchema(BaseSchema):
     teacher_id: Optional[int] = None
     handle_time: Optional[datetime] = None
     handle_content: Optional[str] = None
+    create_time: Optional[datetime] = None
+    delete_flag: Optional[int] = 0
+    remark: Optional[str] = None
+
+
+# ==================== 表15：组织架构表 ====================
+class OrgDepartmentSchema(BaseSchema):
+    id: Optional[int] = None
+    dept_name: Optional[str] = None
+    parent_id: Optional[int] = 0
+    dept_level: Optional[int] = 1
+    sort_order: Optional[int] = 0
+    dept_desc: Optional[str] = None
+    manager_id: Optional[int] = None
+    contact_phone: Optional[str] = None
+    contact_email: Optional[str] = None
+    create_time: Optional[datetime] = None
+    delete_flag: Optional[int] = 0
+    remark: Optional[str] = None
+
+
+# ==================== 表14：站内通知表 ====================
+class NotificationSchema(BaseSchema):
+    id: Optional[int] = None
+    recipient_id: Optional[int] = None
+    title: Optional[str] = None
+    content: Optional[str] = None
+    notification_type: Optional[str] = None
+    related_id: Optional[int] = None
+    is_read: Optional[int] = 0
     create_time: Optional[datetime] = None
     delete_flag: Optional[int] = 0
     remark: Optional[str] = None

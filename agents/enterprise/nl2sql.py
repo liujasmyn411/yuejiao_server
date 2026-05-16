@@ -9,7 +9,7 @@ from agents.enterprise.prompts import NL2SQL_PROMPT
 
 
 class NL2SQL:
-    """自然语言 → 安全SQL转换器"""
+    """自然语言 → 安全SQL转换器（支持SELECT和有限UPDATE）"""
 
     # 可查询的表白名单
     ALLOWED_TABLES = [
@@ -19,9 +19,17 @@ class NL2SQL:
         "course_project", "event_lecture", "event_registration",
     ]
 
-    # 危险SQL关键字
+    # UPDATE安全白名单: {表名: {允许SET的列, ...}}
+    UPDATE_WHITELIST = {
+        "crm_lead": {"status", "follow_up_history", "next_follow_time", "score", "owner_employee_id"},
+        "student_feedback_ticket": {"status", "solution", "handle_user_id", "handle_time", "is_notified"},
+        "student_admin_service": {"status", "reject_reason", "approver_id", "notify_status"},
+        "student_academic": {"ddl_status", "remind_enabled", "remind_days_before"},
+    }
+
+    # 危险SQL关键字（UPDATE已从黑名单移除，走白名单控制）
     DANGEROUS_KEYWORDS = [
-        "INSERT", "UPDATE", "DELETE", "DROP", "ALTER",
+        "INSERT", "DELETE", "DROP", "ALTER",
         "TRUNCATE", "CREATE", "REPLACE", "GRANT", "REVOKE",
         "EXEC", "EXECUTE", "INTO OUTFILE", "INTO DUMPFILE",
         "LOAD_FILE", "SLEEP(", "BENCHMARK(", "WAITFOR",
@@ -62,16 +70,22 @@ class NL2SQL:
         """验证SQL安全性，返回 (是否安全, 原因)"""
         upper = sql.upper().strip()
 
-        # 必须是SELECT开头
-        if not upper.startswith("SELECT"):
-            return False, "只允许SELECT查询，不支持修改操作"
+        # 必须是SELECT或UPDATE开头
+        if upper.startswith("SELECT"):
+            return self._validate_select(sql)
+        elif upper.startswith("UPDATE"):
+            return self._validate_update(sql)
+        else:
+            return False, "只允许SELECT查询和有限的UPDATE操作"
 
-        # 检测危险关键字
+    def _validate_select(self, sql: str) -> tuple:
+        """验证SELECT语句安全性"""
+        upper = sql.upper()
+
         for kw in self.DANGEROUS_KEYWORDS:
             if kw.upper() in upper:
                 return False, f"SQL包含不允许的操作: {kw}"
 
-        # 检测表名是否在白名单
         table_pattern = re.compile(r'\bFROM\s+(\w+)|JOIN\s+(\w+)', re.IGNORECASE)
         tables = set()
         for m in table_pattern.finditer(sql):
@@ -82,44 +96,105 @@ class NL2SQL:
             if t not in self.ALLOWED_TABLES:
                 return False, f"不允许查询表: {t}"
 
-        # 确保有LIMIT
+        return True, ""
+
+    def _validate_update(self, sql: str) -> tuple:
+        """验证UPDATE语句安全性（白名单列级校验）"""
+        upper = sql.upper()
+
+        # 必须有WHERE
+        if "WHERE" not in upper:
+            return False, "UPDATE必须有WHERE条件"
+
+        # 必须有LIMIT
         if "LIMIT" not in upper:
-            sql_clean = sql.rstrip().rstrip(";").rstrip()
-            return True, ""  # 允许不加LIMIT
+            return False, "UPDATE必须有LIMIT限制"
+
+        # 提取表名
+        table_m = re.search(r'UPDATE\s+(\w+)', sql, re.IGNORECASE)
+        if not table_m:
+            return False, "无法识别UPDATE目标表"
+        table = table_m.group(1).lower()
+        if table not in self.UPDATE_WHITELIST:
+            return False, f"不允许UPDATE表: {table}，仅支持: {', '.join(self.UPDATE_WHITELIST.keys())}"
+
+        # 提取SET列名
+        set_match = re.search(r'SET\s+(.+?)\s*(?:WHERE|$)', sql, re.IGNORECASE | re.DOTALL)
+        if not set_match:
+            return False, "无法识别SET子句"
+
+        set_clause = set_match.group(1)
+        allowed_cols = self.UPDATE_WHITELIST[table]
+        col_pattern = re.compile(r'(\w+)\s*=', re.IGNORECASE)
+        for m in col_pattern.finditer(set_clause):
+            col = m.group(1).lower()
+            if col not in allowed_cols:
+                return False, f"表{table}不允许修改列: {col}，仅允许: {', '.join(sorted(allowed_cols))}"
 
         return True, ""
 
     def execute(self, db, sql: str) -> list:
-        """执行安全的SQL查询并返回结果"""
+        """执行安全的SQL查询/更新并返回结果"""
         from sqlalchemy import text
 
-        # 二次验证
         safe, reason = self._validate_sql(sql)
         if not safe:
             raise ValueError(reason)
 
         try:
             result = db.execute(text(sql))
-            rows = result.fetchall()
-            columns = result.keys()
-            return [dict(zip(columns, row)) for row in rows]
+            upper = sql.upper().strip()
+            if upper.startswith("UPDATE"):
+                db.flush()
+                return [{"affected_rows": result.rowcount, "message": "更新成功"}]
+            else:
+                rows = result.fetchall()
+                columns = result.keys()
+                return [dict(zip(columns, row)) for row in rows]
         except Exception as e:
             raise RuntimeError(f"SQL执行失败: {e}")
 
     def query(self, db, natural_language: str) -> dict:
-        """一步完成：解析 → 验证 → 执行 → 格式化结果"""
+        """一步完成：解析 → 验证 → 执行 → 格式化结果（仅SELECT）"""
         parsed = self.parse(natural_language)
         if "error" in parsed:
             return parsed
 
+        sql = parsed["sql"]
+        if sql.upper().strip().startswith("UPDATE"):
+            return {"error": "请使用update方法执行更新操作", "sql": sql}
+
         try:
-            rows = self.execute(db, parsed["sql"])
+            rows = self.execute(db, sql)
             return {
-                "sql": parsed["sql"],
+                "sql": sql,
                 "explanation": parsed.get("explanation", ""),
                 "type": parsed.get("type", "SELECT"),
                 "count": len(rows),
                 "data": rows,
             }
         except Exception as e:
-            return {"error": str(e), "sql": parsed.get("sql", "")}
+            return {"error": str(e), "sql": sql}
+
+    def update(self, db, natural_language: str) -> dict:
+        """一步完成：解析 → 验证 → 执行UPDATE → 提交事务"""
+        parsed = self.parse(natural_language)
+        if "error" in parsed:
+            return parsed
+
+        sql = parsed["sql"]
+        if not sql.upper().strip().startswith("UPDATE"):
+            return {"error": "该语句不是UPDATE操作，请使用query方法", "sql": sql}
+
+        try:
+            rows = self.execute(db, sql)
+            db.commit()
+            return {
+                "sql": sql,
+                "explanation": parsed.get("explanation", ""),
+                "type": "UPDATE",
+                "data": rows,
+            }
+        except Exception as e:
+            db.rollback()
+            return {"error": str(e), "sql": sql}

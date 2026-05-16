@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/test_student.py tests/test_system.py -v --tb=short)",
+      "Bash(python -m pytest tests/test_system.py -v --tb=short)",
+      "Bash(python -c \"from api.enterprise_routes import router; print\\('enterprise routes OK'\\); from agents.student.approval_flow import ApprovalFlow; print\\('ApprovalFlow OK'\\); from api.student_routes import router; print\\('student routes OK'\\)\")",
+      "Bash(git -C \"d:\\\\yuejiao_agents\" log --oneline -15)",
+      "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d \"{\\\\\"message\\\\\":\\\\\"我想了解新加坡留学有什么项目\\\\\"}\")",
+      "Bash(python -m json.tool)",
+      "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d \"{\\\\\"message\\\\\":\\\\\"帮我查今天的日报\\\\\"}\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d \"{\\\\\"message\\\\\":\\\\\"我最近压力很大\\\\\"}\")",
+      "Bash(netstat -ano)"
+    ]
+  }
+}

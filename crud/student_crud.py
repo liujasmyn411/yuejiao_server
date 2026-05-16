@@ -8,7 +8,8 @@ from datetime import datetime
 
 from model import (
     SysUser, StudentAdminService, StudentPsychProfile, StudentPsychAlert,
-    StudentFeedbackTicket, StudentAcademic, StudentStudyAbroadProgress
+    StudentFeedbackTicket, StudentAcademic, StudentStudyAbroadProgress,
+    Notification,
 )
 from schemas import (
     LeaveCreateRequest, FeedbackCreateRequest, PsychAlertCreateRequest
@@ -142,6 +143,22 @@ class FeedbackCRUD:
             query = query.filter(StudentFeedbackTicket.student_id == student_id)
         return query.order_by(StudentFeedbackTicket.create_time.desc()).all()
 
+    @staticmethod
+    def resolve(db: Session, ticket_id: int, solution: str, handle_user_id: int):
+        """处理投诉反馈工单"""
+        ticket = db.query(StudentFeedbackTicket).filter(
+            StudentFeedbackTicket.id == ticket_id,
+            StudentFeedbackTicket.delete_flag == 0,
+        ).first()
+        if not ticket:
+            return None
+        ticket.status = "已处理"
+        ticket.solution = solution
+        ticket.handle_user_id = handle_user_id
+        ticket.handle_time = datetime.now()
+        ticket.is_notified = 1
+        return ticket
+
 
 class PsychAlertCRUD:
     """心理预警数据访问对象"""
@@ -241,3 +258,59 @@ class StudyAbroadCRUD:
             StudentStudyAbroadProgress.is_current == 1,
             StudentStudyAbroadProgress.delete_flag == 0
         ).first()
+
+
+class NotificationCRUD:
+    """站内通知数据访问对象"""
+
+    @staticmethod
+    def create(db: Session, recipient_id: int, title: str, content: str,
+               notification_type: str = "system", related_id: int = None):
+        """创建通知"""
+        notif = Notification(
+            recipient_id=recipient_id,
+            title=title,
+            content=content,
+            notification_type=notification_type,
+            related_id=related_id,
+        )
+        db.add(notif)
+        return notif
+
+    @staticmethod
+    def get_by_recipient(db: Session, recipient_id: int, limit: int = 50):
+        """查询用户通知列表（按时间倒序）"""
+        return db.query(Notification).filter(
+            Notification.recipient_id == recipient_id,
+            Notification.delete_flag == 0,
+        ).order_by(Notification.create_time.desc()).limit(limit).all()
+
+    @staticmethod
+    def get_unread_count(db: Session, recipient_id: int) -> int:
+        """查询未读通知数"""
+        return db.query(Notification).filter(
+            Notification.recipient_id == recipient_id,
+            Notification.is_read == 0,
+            Notification.delete_flag == 0,
+        ).count()
+
+    @staticmethod
+    def mark_read(db: Session, notif_id: int, recipient_id: int):
+        """标记单条通知为已读"""
+        notif = db.query(Notification).filter(
+            Notification.id == notif_id,
+            Notification.recipient_id == recipient_id,
+            Notification.delete_flag == 0,
+        ).first()
+        if notif:
+            notif.is_read = 1
+        return notif
+
+    @staticmethod
+    def mark_all_read(db: Session, recipient_id: int):
+        """标记所有通知为已读"""
+        db.query(Notification).filter(
+            Notification.recipient_id == recipient_id,
+            Notification.is_read == 0,
+            Notification.delete_flag == 0,
+        ).update({"is_read": 1})

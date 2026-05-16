@@ -54,6 +54,7 @@ NL2SQL_PROMPT = """你是一个安全的NL2SQL转换器。将用户的自然语�
 
 ### crm_lead - 意向客户表
 字段: id, customer_name, contact_info, age, education, intended_country, intended_major, family_finance, language_level, background_info, follow_up_history, status, source_channel, next_follow_time, score, owner_employee_id, create_time, update_time
+可UPDATE列: status, follow_up_history, next_follow_time, score, owner_employee_id
 
 ### employee_daily_report - 员工日报表
 字段: id, employee_id, report_date, work_type, content, summary, report_status, create_time
@@ -63,12 +64,15 @@ NL2SQL_PROMPT = """你是一个安全的NL2SQL转换器。将用户的自然语�
 
 ### student_admin_service - 行政服务表
 字段: id, student_id, service_type, leave_type, start_time, end_time, reason, status, reject_reason, approver_id, create_time
+可UPDATE列: status, reject_reason, approver_id, notify_status
 
 ### student_feedback_ticket - 反馈工单表
 字段: id, student_id, feedback_type, content, detail, urgency_level, status, solution, handle_user_id, create_time
+可UPDATE列: status, solution, handle_user_id, handle_time, is_notified
 
 ### student_academic - 教务信息表
 字段: id, student_id, course_name, academic_type, title, deadline, ddl_status, semester
+可UPDATE列: ddl_status, remind_enabled, remind_days_before
 
 ### student_study_abroad_progress - 留学进度表
 字段: id, student_id, target_country, target_school, target_major, stage, stage_order, stage_status, handler_name, estimated_complete_date, is_current
@@ -80,16 +84,18 @@ NL2SQL_PROMPT = """你是一个安全的NL2SQL转换器。将用户的自然语�
 字段: id, event_name, event_type, speaker, start_time, location, max_participants, current_participants, event_status
 
 ## 安全规则
-1. 只生成 SELECT 语句，禁止 INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE
-2. 所有查询必须包含 WHERE delete_flag = 0（如果该表有此字段）
-3. 对字符串使用 LIKE '%关键词%' 做模糊匹配
-4. LIMIT 不超过 100
-5. 如果用户意图不明确，返回 error
+1. 默认生成 SELECT。仅当用户明确表达"修改/更新/改成/审批同意/驳回"意图且目标表在"可UPDATE列"列表中时，才生成UPDATE
+2. UPDATE必须包含 WHERE delete_flag = 0 AND id = 具体值，且必须有 LIMIT 1
+3. UPDATE只能SET上述标注为"可UPDATE列"的字段
+4. SELECT查询必须包含 WHERE delete_flag = 0（如果该表有此字段）
+5. 对字符串使用 LIKE '%关键词%' 做模糊匹配
+6. LIMIT 不超过 100
+7. 如果用户意图不明确或不在允许范围内，返回 error
 
 用户输入：{user_input}
 
 请只返回JSON格式：
-{{"sql": "生成的SELECT语句", "type": "SELECT", "explanation": "中文说明"}}
+{{"sql": "生成的SQL语句", "type": "SELECT或UPDATE", "explanation": "中文说明"}}
 或 {{"error": "原因"}}"""
 
 GUIDE_PROMPT = """你是粤教服务的新人入职指引助手。根据公司新人指南知识库回答员工问题。

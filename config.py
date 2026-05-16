@@ -50,9 +50,12 @@ class Settings(BaseSettings):
     psych_ai_api_key: str = ""
     psych_ai_model: str = "psych-assistant-v1"
 
-    # ==================== 兼容旧配置名 ====================
+    # ==================== LLM 大模型配置 ====================
     openai_api_key: str = ""
+    openai_api_base: str = "https://api.openai.com/v1"
     model_name: str = "gpt-4o-mini"
+    openai_max_tokens: int = 2000
+    openai_temperature: float = 0.7
 
     model_config = {
         "env_file": ".env",

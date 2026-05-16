@@ -2,12 +2,13 @@
 粤教服务 - 客服Agent API 路由
 处理活动查询/报名 / 项目查询 / 客户画像研判等
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 
 from database import get_db
 from schemas import EventRegisterRequest
 from crud import EventCRUD, ProjectCRUD
+from utils.file_parser import parse_file, extract_profile_from_text
 
 router = APIRouter(prefix="/api/customer", tags=["客服Agent"])
 
@@ -199,6 +200,39 @@ def profile_match(
 
     matched.sort(key=lambda x: x["match_score"], reverse=True)
     return {"matches": matched[:5]}
+
+
+# ==================== 文件解析（客户画像研判） ====================
+
+@router.post("/parse-file")
+async def parse_customer_file(file: UploadFile = File(...)):
+    """上传客户简历/信息文件（PDF/Excel/TXT），解析为文本用于画像研判
+
+    支持格式：pdf / xlsx / xls / txt
+    会从文本中自动提取姓名、年龄、学历、意向国家、联系方式等关键字段
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="未选择文件")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="文件为空")
+
+    result = parse_file(content, file.filename)
+    if result.get("error"):
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    # 从解析文本中提取画像关键字段
+    profile = extract_profile_from_text(result["text"]) if result["text"] else {}
+
+    return {
+        "success": True,
+        "filename": result["filename"],
+        "format": result["format"],
+        "text": result["text"],
+        "text_length": result["text_length"],
+        "extracted_profile": profile,
+    }
 
 
 # ==================== 客服对话接口 ====================

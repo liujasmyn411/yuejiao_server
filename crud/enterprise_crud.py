@@ -6,7 +6,10 @@
 from sqlalchemy.orm import Session
 from datetime import datetime
 
-from model import CrmLead, EmployeeDailyReport, StudentScore, SysUser, StudentFeedbackTicket, StudentPsychAlert
+from model import (
+    CrmLead, EmployeeDailyReport, StudentScore, SysUser,
+    StudentFeedbackTicket, StudentPsychAlert, OrgDepartment,
+)
 
 
 class CrmCRUD:
@@ -152,3 +155,50 @@ class DashboardCRUD:
             "psych_alerts": {"high": high_risk, "medium": medium_risk},
             "daily_reports": {"today": today_reports}
         }
+
+
+class OrgCRUD:
+    """组织架构数据访问对象"""
+
+    @staticmethod
+    def get_all(db: Session):
+        """查询所有部门（按层级和排序排列）"""
+        return db.query(OrgDepartment).filter(
+            OrgDepartment.delete_flag == 0,
+        ).order_by(OrgDepartment.dept_level.asc(), OrgDepartment.sort_order.asc()).all()
+
+    @staticmethod
+    def get_tree(db: Session):
+        """构建组织架构树形结构"""
+        depts = OrgCRUD.get_all(db)
+        dept_map = {}
+        for d in depts:
+            dept_map[d.id] = {
+                "id": d.id,
+                "name": d.dept_name,
+                "level": d.dept_level,
+                "desc": d.dept_desc,
+                "manager_id": d.manager_id,
+                "contact_phone": d.contact_phone,
+                "contact_email": d.contact_email,
+                "children": [],
+            }
+
+        roots = []
+        for d in depts:
+            node = dept_map[d.id]
+            if d.parent_id == 0 or d.parent_id not in dept_map:
+                roots.append(node)
+            else:
+                dept_map[d.parent_id]["children"].append(node)
+
+        return roots
+
+    @staticmethod
+    def get_dept_members(db: Session, dept_name: str):
+        """查询某部门下的员工"""
+        return db.query(SysUser).filter(
+            SysUser.department == dept_name,
+            SysUser.user_type == "EMPLOYEE",
+            SysUser.delete_flag == 0,
+        ).all()

@@ -13,6 +13,8 @@ from model.model import (
     EventRegistration,
     StudentAcademic,
     StudentStudyAbroadProgress,
+    Notification,
+    OrgDepartment,
 )
 
 __all__ = [
@@ -30,4 +32,6 @@ __all__ = [
     "EventRegistration",
     "StudentAcademic",
     "StudentStudyAbroadProgress",
+    "Notification",
+    "OrgDepartment",
 ]

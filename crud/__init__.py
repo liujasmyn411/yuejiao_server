@@ -1,8 +1,8 @@
 from crud.customer_crud import EventCRUD, ProjectCRUD
-from crud.enterprise_crud import CrmCRUD, ReportCRUD, ScoreCRUD, EmployeeCRUD, DashboardCRUD
+from crud.enterprise_crud import CrmCRUD, ReportCRUD, ScoreCRUD, EmployeeCRUD, DashboardCRUD, OrgCRUD
 from crud.student_crud import (
     UserCRUD, StudentServiceCRUD, FeedbackCRUD, PsychAlertCRUD,
-    AcademicCRUD, StudyAbroadCRUD
+    AcademicCRUD, StudyAbroadCRUD, NotificationCRUD,
 )
 
 __all__ = [
@@ -15,6 +15,7 @@ __all__ = [
     "ScoreCRUD",
     "EmployeeCRUD",
     "DashboardCRUD",
+    "OrgCRUD",
     # 学生智能助手
     "UserCRUD",
     "StudentServiceCRUD",
@@ -22,4 +23,5 @@ __all__ = [
     "PsychAlertCRUD",
     "AcademicCRUD",
     "StudyAbroadCRUD",
+    "NotificationCRUD",
 ]

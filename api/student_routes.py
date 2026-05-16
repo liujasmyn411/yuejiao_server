@@ -8,12 +8,12 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from schemas import (
-    LeaveCreateRequest, FeedbackCreateRequest, PsychAlertCreateRequest,
-    RiskLevelEnum
+    LeaveCreateRequest, FeedbackCreateRequest, FeedbackResolveRequest,
+    PsychAlertCreateRequest, RiskLevelEnum
 )
 from crud import (
     UserCRUD, StudentServiceCRUD, FeedbackCRUD, PsychAlertCRUD,
-    AcademicCRUD, StudyAbroadCRUD
+    AcademicCRUD, StudyAbroadCRUD, NotificationCRUD,
 )
 from utils.auth import get_current_user, require_student
 from model import SysUser
@@ -54,13 +54,42 @@ def get_student_info(student_id: int, db: Session = Depends(get_db), current_use
 @router.post("/api/student/leave")
 def create_leave(req: LeaveCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_student)):
     """学生提交请假申请"""
-    _validate_student(req.student_id, db)
+    student = _validate_student(req.student_id, db)
     try:
-        StudentServiceCRUD.create_leave(db, req)
+        leave = StudentServiceCRUD.create_leave(db, req)
+        # 预填审批人为班主任
+        if student.head_teacher_id:
+            leave.approver_id = student.head_teacher_id
         db.commit()
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"success": True, "message": "请假申请已提交，等待审批"}
+
+    # 查班主任联系信息（供邮件通知用）
+    teacher_info = {}
+    if student.head_teacher_id:
+        teacher = db.query(SysUser).filter(
+            SysUser.id == student.head_teacher_id,
+            SysUser.delete_flag == 0,
+        ).first()
+        if teacher:
+            teacher_info = {
+                "teacher_name": teacher.real_name,
+                "teacher_email": teacher.email,
+                "teacher_contact": teacher.contact_info,
+            }
+
+    return {
+        "success": True,
+        "message": "请假申请已提交，等待班主任审批",
+        "leave_id": leave.id,
+        "student_name": student.real_name,
+        "student_email": student.email,
+        "leave_type": req.leave_type,
+        "start_time": str(req.start_time) if req.start_time else None,
+        "end_time": str(req.end_time) if req.end_time else None,
+        "reason": req.reason,
+        "teacher": teacher_info,
+    }
 
 
 # ---- 请假: 查询 ----
@@ -101,6 +130,26 @@ def list_feedback(student_id: int = 0, db: Session = Depends(get_db), current_us
          "status": t.status, "solution": t.solution}
         for t in tickets
     ]}
+
+
+# ---- 投诉反馈: 处理 ----
+@router.put("/api/student/feedback/{ticket_id}/resolve")
+def resolve_feedback(ticket_id: int, req: FeedbackResolveRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+    """处理投诉反馈工单（老师/管理员标记已解决）"""
+    ticket = FeedbackCRUD.resolve(db, ticket_id, req.solution, req.handle_user_id)
+    if not ticket:
+        raise HTTPException(status_code=404, detail="工单不存在")
+
+    NotificationCRUD.create(
+        db,
+        recipient_id=ticket.student_id,
+        title="投诉反馈已处理",
+        content=f"您的{ticket.feedback_type}({ticket.content})已处理：{req.solution}",
+        notification_type="feedback_resolved",
+        related_id=ticket.id,
+    )
+    db.commit()
+    return {"success": True, "ticket_id": ticket.id, "message": "工单已处理"}
 
 
 # ---- 心理预警: 提交 ----
@@ -208,6 +257,45 @@ def get_current_stage(student_id: int, db: Session = Depends(get_db), current_us
         "handler_contact": stage.handler_contact,
         "estimated_complete_date": str(stage.estimated_complete_date) if stage.estimated_complete_date else None,
     }
+
+
+# ==================== 站内通知接口 ====================
+
+@router.get("/api/student/notification")
+def list_notifications(recipient_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+    """查询用户通知列表"""
+    notifs = NotificationCRUD.get_by_recipient(db, recipient_id)
+    return {"notifications": [
+        {"id": n.id, "title": n.title, "content": n.content,
+         "notification_type": n.notification_type, "related_id": n.related_id,
+         "is_read": n.is_read, "create_time": str(n.create_time)}
+        for n in notifs
+    ]}
+
+
+@router.get("/api/student/notification/unread-count")
+def unread_count(recipient_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+    """查询未读通知数"""
+    count = NotificationCRUD.get_unread_count(db, recipient_id)
+    return {"recipient_id": recipient_id, "unread_count": count}
+
+
+@router.put("/api/student/notification/{notif_id}/read")
+def mark_notification_read(notif_id: int, recipient_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+    """标记单条通知为已读"""
+    notif = NotificationCRUD.mark_read(db, notif_id, recipient_id)
+    if not notif:
+        raise HTTPException(status_code=404, detail="通知不存在")
+    db.commit()
+    return {"success": True, "message": "已标记为已读"}
+
+
+@router.put("/api/student/notification/read-all")
+def mark_all_read(recipient_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+    """标记所有通知为已读"""
+    NotificationCRUD.mark_all_read(db, recipient_id)
+    db.commit()
+    return {"success": True, "message": "全部已读"}
 
 
 # ==================== 学生助手对话接口 ====================
