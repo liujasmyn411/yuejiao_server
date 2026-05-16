@@ -6,23 +6,26 @@ from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from sqlalchemy.orm import Session
 
 from config import settings
 from database import get_db
 from crud import UserCRUD
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer(auto_error=False)
 
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    password_bytes = password.encode("utf-8")[:72]
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password_bytes, salt).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    plain_bytes = plain.encode("utf-8")[:72]
+    hashed_bytes = hashed.encode("utf-8")
+    return bcrypt.checkpw(plain_bytes, hashed_bytes)
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:

@@ -1,10 +1,10 @@
 -- =============================================
 -- 粤教服务AI Agent系统 · MySQL 完整版
--- 包含：13张表建表语句 + 真实测试数据
+-- 包含：15张表建表语句 + 真实测试数据
 -- 字符集：utf8mb4  存储引擎：InnoDB
--- 版本：v2.0 · 可直接 source 执行
+-- 版本：v2.1 · 可直接 source 执行
 -- 用法：mysql -u root -p < yuejiao.sql
--- 生成日期：2026-05-15
+-- 生成日期：2026-05-16
 -- =============================================
 
 CREATE DATABASE IF NOT EXISTS yuejiao
@@ -44,16 +44,19 @@ CREATE TABLE sys_user (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='统一用户表';
 
 -- 1. 统一用户表（学生/员工） 测试数据
+-- 密码说明：
+--   admin     → admin123
+--   员工1~员工5  → 123456
+--   学生4~学生5  → 123456
 INSERT INTO sys_user (id, username, password_hash, real_name, user_type, employee_role, head_teacher_id, department, contact_info, email, id_card, avatar, country_region, status, last_login_time, last_login_ip, create_time, update_time, delete_flag, remark) VALUES
-(1, 'admin001', 'pbkdf2:sha256:600000$...', '张伟', 'ADMIN', NULL, NULL, '信息技术部', '13800138001', 'zhangwei@yuejiao.edu', '440106199001011234', 'https://cdn.yuejiao.edu/avatar/admin001.jpg', '中国', '正常', '2026-05-11 14:30:00', '192.168.1.100', '2026-04-13 14:30:00', '2026-05-11 14:30:00', 0, '系统超级管理员'),
-(2, 'teacher_li', 'pbkdf2:sha256:600000$...', '李芳', 'EMPLOYEE', '心理咨询师', NULL, '学生事务中心', '13912345678', 'lifang@yuejiao.edu', '440106198805152345', 'https://cdn.yuejiao.edu/avatar/teacher_li.jpg', '中国', '正常', '2026-05-12 14:30:00', '192.168.1.101', '2026-04-18 14:30:00', '2026-05-12 14:30:00', 0, '负责学生心理健康辅导'),
-(3, 'teacher_wang', 'pbkdf2:sha256:600000$...', '王强', 'EMPLOYEE', '留学顾问', NULL, '国际教育中心', '13798765432', 'wangqiang@yuejiao.edu', '440106199203203456', 'https://cdn.yuejiao.edu/avatar/teacher_wang.jpg', '中国', '正常', '2026-05-08 14:30:00', '192.168.1.102', '2026-04-23 14:30:00', '2026-05-08 14:30:00', 0, '负责英美留学项目咨询'),
-(4, 'stu2024001', 'pbkdf2:sha256:600000$...', '陈小明', 'STUDENT', NULL, 9, '计算机学院-软件工程2024级', '18620240001', 'chenxm@stu.yuejiao.edu', '440106200603154567', 'https://cdn.yuejiao.edu/avatar/stu2024001.jpg', '中国', '正常', '2026-05-10 14:30:00', '192.168.2.10', '2026-04-28 14:30:00', '2026-05-10 14:30:00', 0, '2024级新生，成绩优异'),
-(5, 'stu2024002', 'pbkdf2:sha256:600000$...', '林雨桐', 'STUDENT', NULL, 9, '外国语学院-英语2024级', '18620240002', 'linyt@stu.yuejiao.edu', '440106200511264568', 'https://cdn.yuejiao.edu/avatar/stu2024002.jpg', '中国', '正常', '2026-05-06 14:30:00', '192.168.2.11', '2026-05-03 14:30:00', '2026-05-06 14:30:00', 0, '有出国留学意向'),
-(6, 'stu2023001', 'pbkdf2:sha256:600000$...', '赵子轩', 'STUDENT', NULL, 9, '商学院-国际贸易2023级', '18620230001', 'zhaozx@stu.yuejiao.edu', '440106200409083456', 'https://cdn.yuejiao.edu/avatar/stu2023001.jpg', '中国', '正常', '2026-05-03 14:30:00', '192.168.2.12', '2026-03-14 14:30:00', '2026-05-03 14:30:00', 0, '大二学生，雅思备考中'),
-(7, 'sales_chen', 'pbkdf2:sha256:600000$...', '陈美玲', 'EMPLOYEE', '销售主管', NULL, '招生市场部', '13500135001', 'chenml@yuejiao.edu', '440106199510105678', 'https://cdn.yuejiao.edu/avatar/sales_chen.jpg', '中国', '正常', '2026-05-12 14:30:00', '192.168.1.103', '2026-04-25 14:30:00', '2026-05-12 14:30:00', 0, '负责华南地区招生'),
-(8, 'stu2024003', 'pbkdf2:sha256:600000$...', '周思琪', 'STUDENT', NULL, 9, '艺术学院-视觉传达2024级', '18620240003', 'zhousq@stu.yuejiao.edu', '440106200702154321', 'https://cdn.yuejiao.edu/avatar/stu2024003.jpg', '中国', '正常', '2026-05-09 14:30:00', '192.168.2.13', '2026-05-01 14:30:00', '2026-05-09 14:30:00', 0, '设计专业新生'),
-(9, 'teacher_zhao', 'pbkdf2:sha256:600000$...', '赵敏', 'EMPLOYEE', '班主任', NULL, '外国语学院', '13612345678', 'zhaomin@yuejiao.edu', '440106199008083456', 'https://cdn.yuejiao.edu/avatar/teacher_zhao.jpg', '中国', '正常', '2026-05-10 08:30:00', '192.168.1.104', '2026-04-20 10:00:00', '2026-05-10 08:30:00', 0, '负责外国语学院、计算机学院、商学院、艺术学院学生管理');
+(1, 'admin', '$2b$12$HylE4rJWlR4njwnrajvl0.X6EkxZeox/qrhGpsyx3RWh75lIEMyye', '管理员', 'ADMIN', '系统管理员', NULL, '粤教服务', '13800000000', 'admin@yuejiao.edu', NULL, NULL, '中国', '正常', NULL, NULL, NOW(), NOW(), 0, '系统超级管理员'),
+(2, '员工1', '$2b$12$ij87MXqaqzXrNOgkBBijsOnMABupVMW5BqEEJVhT3go9nXHAyYBQW', '张建国', 'EMPLOYEE', '班主任', NULL, '销售部', '13800000001', 'zhangjg@yuejiao.edu', NULL, NULL, '中国', '正常', NULL, NULL, NOW(), NOW(), 0, NULL),
+(3, '员工2', '$2b$12$y9BVHTkd3gFQi8vehAPzxeTfAzTjUW4TjgYwaHekBX6BiaTsJZr6O', '李明', 'EMPLOYEE', '市场专员', NULL, '市场部', '13800000002', 'liming@yuejiao.edu', NULL, NULL, '中国', '正常', NULL, NULL, NOW(), NOW(), 0, NULL),
+(4, '员工3', '$2b$12$KEIWSTjNz1NU.37sndIZeO3GYBK3dQzsoBG7ILdVhrHOfe/pxn/2S', '王芳', 'EMPLOYEE', '教务主管', NULL, '教务部', '13800000003', 'wangfang@yuejiao.edu', NULL, NULL, '中国', '正常', NULL, NULL, NOW(), NOW(), 0, NULL),
+(5, '员工4', '$2b$12$5D9aZyoeY13ZcmX7XKOqqe/LJ931Q2MX5xRL/odi26amvmCgfbZn6', '王强', 'EMPLOYEE', '留学顾问', NULL, '留学服务部', '13800000004', 'wangqiang@yuejiao.edu', NULL, NULL, '中国', '正常', NULL, NULL, NOW(), NOW(), 0, NULL),
+(6, '员工5', '$2b$12$O/mjzWSBHx68ipqjjU/x1eV9IS0BMHd0Na.ImoW54Fb3VBFKLJzL.', '陈美玲', 'EMPLOYEE', '客服专员', NULL, '客服部', '13800000005', 'chenml@yuejiao.edu', NULL, NULL, '中国', '正常', NULL, NULL, NOW(), NOW(), 0, NULL),
+(7, '学生4', '$2b$12$.j7ra5ccYvF9OT0cvw.r6eFBUfpCuVKGPpNw2RflCgYPtmdemSt.S', '赵小明', 'STUDENT', NULL, 2, '计算机系', '13900000004', 'zhaoxm@stu.yuejiao.edu', NULL, NULL, '中国', '正常', NULL, NULL, NOW(), NOW(), 0, NULL),
+(8, '学生5', '$2b$12$3VbcrwaUDCr2wa.XDXMILuTgg3kPXw2q2xW0Mf6wwczqBTC.uRuG2', '钱小红', 'STUDENT', NULL, 2, '商学院', '13900000005', 'qianxh@stu.yuejiao.edu', NULL, NULL, '中国', '正常', NULL, NULL, NOW(), NOW(), 0, NULL);
 
 
 
@@ -292,6 +295,8 @@ CREATE TABLE course_project (
     duration VARCHAR(50) DEFAULT NULL COMMENT '学制',
     description TEXT DEFAULT NULL COMMENT '项目介绍',
     target_audience VARCHAR(255) DEFAULT NULL COMMENT '适合人群',
+    age_min INT DEFAULT NULL COMMENT '最低年龄要求',
+    age_max INT DEFAULT NULL COMMENT '最高年龄要求',
     application_require TEXT DEFAULT NULL COMMENT '申请要求',
     is_recommended TINYINT DEFAULT 0 COMMENT '是否推荐 0=否 1=是',
     sort_order INT DEFAULT 0 COMMENT '排序序号',
@@ -300,14 +305,14 @@ CREATE TABLE course_project (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课程项目表';
 
 -- 9. 课程项目表（留学项目） 测试数据
-INSERT INTO course_project (id, project_name, category, country, tuition_fee, duration, description, target_audience, application_require, is_recommended, sort_order, delete_flag, remark) VALUES
-(1, '英国G5名校计算机硕士直通车', '硕士', '英国', '£35,000-£45,000/年', '1年', '针对985/211及优秀双非院校学生，提供牛津、剑桥、帝国理工、UCL、LSE计算机及相关专业硕士申请全流程服务，含文书指导、面试培训、签证办理。', '计算机、软件工程、人工智能等相关专业本科生，GPA3.5+，雅思6.5+', '本科相关专业，GPA3.5/4.0以上，雅思总分6.5（单项不低于6.0），需提交个人陈述和推荐信', 1, 1, 0, '热门项目，每年限招30人'),
-(2, '澳洲八大护理学本科', '本科', '澳大利亚', 'AUD 35,000-42,000/年', '3年', '与悉尼大学、墨尔本大学、蒙纳士大学等澳洲顶尖院校合作，提供护理学本科申请服务，课程含临床实习，毕业后可申请澳洲注册护士资格。', '高中毕业生或大专在读生，对护理行业有热情，英语基础良好', '高中毕业，雅思总分7.0（单项不低于7.0）或PTE65+，需通过面试', 1, 2, 0, '移民优势专业'),
-(3, '加拿大Co-op酒店管理专升硕', '专升硕', '加拿大', 'CAD 25,000-30,000/年', '2.5年', '针对大专毕业生设计的专升硕路径，前1.5年完成本科课程（含Co-op带薪实习），后1年攻读硕士学位，毕业后可申请加拿大PGWP工签。', '酒店管理、旅游管理等相关专业大专毕业生，有实习或工作经验优先', '大专毕业，GPA2.8+，雅思6.0或托福80+，需提交简历和实习证明', 0, 3, 0, '性价比高的移民路径'),
-(4, '美国Top50心理学硕士', '硕士', '美国', '$45,000-65,000/年', '2年', '涵盖临床心理学、咨询心理学、工业组织心理学等方向，合作院校包括NYU、UCLA、密歇根大学等，提供GRE备考指导和科研背景提升。', '心理学、教育学、社会学等相关专业本科生，有科研或志愿者经历', '本科相关专业，GPA3.3+，GRE310+，雅思7.0或托福100+，需提交Writing Sample', 1, 4, 0, '需提前1.5年准备'),
-(5, '德国TU9机械工程硕士', '硕士', '德国', '免学费（仅注册费€300/学期）', '2年', '与德国TU9联盟院校（慕尼黑工大、亚琛工大、柏林工大等）合作，德语授课为主，部分英授项目可选，提供APS审核辅导和德语培训。', '机械工程、车辆工程、自动化等相关专业本科生', '本科相关专业，APS审核通过，德语B2或雅思6.5（英授项目），需课程描述和动机信', 1, 5, 0, '免学费，性价比极高'),
-(6, '新加坡国立大学商科硕士', '硕士', '新加坡', 'SGD 50,000-60,000/年', '1年', '与NUS、NTU商学院合作，提供金融、会计、市场营销等热门方向申请服务，课程紧凑，毕业后可留新就业，平均起薪高。', '商科、经济学、管理学等相关专业本科生，有GMAT/GRE成绩', '本科相关专业，GPA3.5+，GMAT650+或GRE315+，雅思7.0或托福100+，需面试', 1, 6, 0, '亚洲顶尖商学院'),
-(7, '日本动漫设计本科', '本科', '日本', '¥80-120万日元/年', '4年', '与京都艺术大学、东京工艺大学、大阪艺术大学等合作，提供动漫、游戏设计、角色设计等专业申请，含日语培训和作品集辅导。', '美术、设计类高中生或同等学历，有绘画基础，热爱动漫文化', '高中毕业，日语N2或EJU日语220+，需提交作品集（8-12件），需面试', 0, 7, 0, '作品集准备周期6-12个月');
+INSERT INTO course_project (id, project_name, category, country, tuition_fee, duration, description, target_audience, age_min, age_max, application_require, is_recommended, sort_order, delete_flag, remark) VALUES
+(1, '英国G5名校计算机硕士直通车', '硕士', '英国', '£35,000-£45,000/年', '1年', '针对985/211及优秀双非院校学生，提供牛津、剑桥、帝国理工、UCL、LSE计算机及相关专业硕士申请全流程服务，含文书指导、面试培训、签证办理。', '计算机、软件工程、人工智能等相关专业本科生，GPA3.5+，雅思6.5+', NULL, NULL, '本科相关专业，GPA3.5/4.0以上，雅思总分6.5（单项不低于6.0），需提交个人陈述和推荐信', 1, 1, 0, '热门项目，每年限招30人'),
+(2, '澳洲八大护理学本科', '本科', '澳大利亚', 'AUD 35,000-42,000/年', '3年', '与悉尼大学、墨尔本大学、蒙纳士大学等澳洲顶尖院校合作，提供护理学本科申请服务，课程含临床实习，毕业后可申请澳洲注册护士资格。', '高中毕业生或大专在读生，对护理行业有热情，英语基础良好', NULL, NULL, '高中毕业，雅思总分7.0（单项不低于7.0）或PTE65+，需通过面试', 1, 2, 0, '移民优势专业'),
+(3, '加拿大Co-op酒店管理专升硕', '专升硕', '加拿大', 'CAD 25,000-30,000/年', '2.5年', '针对大专毕业生设计的专升硕路径，前1.5年完成本科课程（含Co-op带薪实习），后1年攻读硕士学位，毕业后可申请加拿大PGWP工签。', '酒店管理、旅游管理等相关专业大专毕业生，有实习或工作经验优先', NULL, NULL, '大专毕业，GPA2.8+，雅思6.0或托福80+，需提交简历和实习证明', 0, 3, 0, '性价比高的移民路径'),
+(4, '美国Top50心理学硕士', '硕士', '美国', '$45,000-65,000/年', '2年', '涵盖临床心理学、咨询心理学、工业组织心理学等方向，合作院校包括NYU、UCLA、密歇根大学等，提供GRE备考指导和科研背景提升。', '心理学、教育学、社会学等相关专业本科生，有科研或志愿者经历', NULL, NULL, '本科相关专业，GPA3.3+，GRE310+，雅思7.0或托福100+，需提交Writing Sample', 1, 4, 0, '需提前1.5年准备'),
+(5, '德国TU9机械工程硕士', '硕士', '德国', '免学费（仅注册费€300/学期）', '2年', '与德国TU9联盟院校（慕尼黑工大、亚琛工大、柏林工大等）合作，德语授课为主，部分英授项目可选，提供APS审核辅导和德语培训。', '机械工程、车辆工程、自动化等相关专业本科生', NULL, NULL, '本科相关专业，APS审核通过，德语B2或雅思6.5（英授项目），需课程描述和动机信', 1, 5, 0, '免学费，性价比极高'),
+(6, '新加坡国立大学商科硕士', '硕士', '新加坡', 'SGD 50,000-60,000/年', '1年', '与NUS、NTU商学院合作，提供金融、会计、市场营销等热门方向申请服务，课程紧凑，毕业后可留新就业，平均起薪高。', '商科、经济学、管理学等相关专业本科生，有GMAT/GRE成绩', NULL, NULL, '本科相关专业，GPA3.5+，GMAT650+或GRE315+，雅思7.0或托福100+，需面试', 1, 6, 0, '亚洲顶尖商学院'),
+(7, '日本动漫设计本科', '本科', '日本', '¥80-120万日元/年', '4年', '与京都艺术大学、东京工艺大学、大阪艺术大学等合作，提供动漫、游戏设计、角色设计等专业申请，含日语培训和作品集辅导。', '美术、设计类高中生或同等学历，有绘画基础，热爱动漫文化', NULL, NULL, '高中毕业，日语N2或EJU日语220+，需提交作品集（8-12件），需面试', 0, 7, 0, '作品集准备周期6-12个月');
 
 
 
@@ -465,8 +470,59 @@ INSERT INTO student_study_abroad_progress (id, student_id, target_country, targe
 (12, 4, '英国', '帝国理工学院', '计算机科学', '硕士', '签证办理', 6, '待开始', '待收到录取通知后启动签证流程，准备资金证明、体检等材料', '王强', 'wangqiang@yuejiao.edu / 13798765432', '2026-09-01', NULL, 0, '2026-05-15 10:00:00', '2026-05-15 10:00:00', 0, '英国学生签证Tier 4'),
 (13, 4, '英国', '帝国理工学院', '计算机科学', '硕士', '行前准备', 7, '待开始', '机票预订、住宿安排、行前培训、换汇等', '王强', 'wangqiang@yuejiao.edu / 13798765432', '2026-09-15', NULL, 0, '2026-05-15 10:00:00', '2026-05-15 10:00:00', 0, NULL);
 
+
+-- =============================================
+-- 14.站内通知表
+-- =============================================
+DROP TABLE IF EXISTS notification;
+CREATE TABLE notification (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    recipient_id BIGINT NOT NULL COMMENT '接收人ID',
+    title VARCHAR(100) NOT NULL COMMENT '通知标题',
+    content TEXT DEFAULT NULL COMMENT '通知内容',
+    notification_type VARCHAR(30) DEFAULT NULL COMMENT 'leave_approved/leave_rejected/feedback_resolved/system',
+    related_id BIGINT DEFAULT NULL COMMENT '关联业务ID',
+    is_read TINYINT DEFAULT 0 COMMENT '是否已读',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    delete_flag TINYINT DEFAULT 0 COMMENT '软删除',
+    remark TEXT DEFAULT NULL COMMENT '备注'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='站内通知表';
+
+
+-- =============================================
+-- 15.组织架构表
+-- =============================================
+DROP TABLE IF EXISTS org_department;
+CREATE TABLE org_department (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT COMMENT '主键ID',
+    dept_name VARCHAR(100) NOT NULL COMMENT '部门名称',
+    parent_id BIGINT DEFAULT 0 COMMENT '上级部门ID，0=顶级',
+    dept_level SMALLINT DEFAULT 1 COMMENT '层级 1=公司 2=部门 3=小组',
+    sort_order INT DEFAULT 0 COMMENT '排序序号',
+    dept_desc TEXT DEFAULT NULL COMMENT '部门职能描述',
+    manager_id BIGINT DEFAULT NULL COMMENT '部门负责人ID',
+    contact_phone VARCHAR(20) DEFAULT NULL COMMENT '部门联系电话',
+    contact_email VARCHAR(100) DEFAULT NULL COMMENT '部门邮箱',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    delete_flag TINYINT DEFAULT 0 COMMENT '软删除',
+    remark TEXT DEFAULT NULL COMMENT '备注'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='组织架构表';
+
+-- 15. 组织架构表 测试数据
+INSERT INTO org_department (id, dept_name, parent_id, dept_level, sort_order, dept_desc, manager_id, contact_phone, contact_email, create_time, delete_flag, remark) VALUES
+(1, '粤教服务', 0, 1, 1, '广东省教育服务有限公司总部', NULL, '020-37628058', 'info@yuejiao.edu', NOW(), 0, NULL),
+(2, '市场部', 1, 2, 1, '负责线上线下获客、品牌推广、渠道合作', 2, '020-37628059', 'marketing@yuejiao.edu', NOW(), 0, NULL),
+(3, '销售部', 1, 2, 2, '负责意向客户跟进、签约转化、客户关系维护', 1, '020-37628060', 'sales@yuejiao.edu', NOW(), 0, NULL),
+(4, '教务部', 1, 2, 3, '负责课程安排、考试管理、学籍管理、班主任工作', 3, '020-37628061', 'academic@yuejiao.edu', NOW(), 0, NULL),
+(5, '留学服务部', 1, 2, 4, '负责留学规划、文书辅导、院校申请、签证服务', 4, '020-37628062', 'abroad@yuejiao.edu', NOW(), 0, NULL),
+(6, '客服部', 1, 2, 5, '负责客户咨询、投诉处理、满意度回访', 5, '020-37628063', 'cs@yuejiao.edu', NOW(), 0, NULL),
+(7, '线上咨询组', 2, 3, 1, '抖音/公众号/官网等线上渠道咨询转化', NULL, NULL, NULL, NOW(), 0, NULL),
+(8, '线下活动组', 2, 3, 2, '线下说明会/校园讲座/展会等活动策划与执行', NULL, NULL, NULL, NOW(), 0, NULL),
+(9, '新加坡项目组', 3, 3, 1, '专注新加坡留学项目的销售转化', NULL, NULL, NULL, NOW(), 0, NULL),
+(10, '德国项目组', 3, 3, 2, '专注德国双元制项目的销售转化', NULL, NULL, NULL, NOW(), 0, NULL);
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- =============================================
--- 初始化完成！共创建 13 张表 + 测试数据
+-- 初始化完成！共创建 15 张表 + 测试数据
 -- =============================================

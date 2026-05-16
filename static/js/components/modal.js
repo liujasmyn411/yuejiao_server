@@ -33,8 +33,8 @@ const Modal = (() => {
 
     overlay.querySelector('.modal__close').onclick = close;
     overlay.querySelector('.modal__cancel') && (overlay.querySelector('.modal__cancel').onclick = close);
-    overlay.querySelector('.modal__confirm').onclick = () => {
-      if (onConfirm) onConfirm();
+    overlay.querySelector('.modal__confirm').onclick = async () => {
+      if (onConfirm) await onConfirm();
       close();
     };
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });

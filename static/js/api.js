@@ -19,14 +19,17 @@ const API = (() => {
   async function request(url, options = {}) {
     const { method = 'GET', body, isJson = true } = options;
     const config = { method, headers: headers(isJson) };
-    if (body && isJson) config.body = JSON.stringify(body);
-    if (body && !isJson) config.body = body;
+    if (body != null && isJson) config.body = JSON.stringify(body);
+    else if (body != null && !isJson) config.body = body;
+    else delete config.headers['Content-Type'];
 
     try {
       const res = await fetch(BASE + url, config);
       if (res.status === 401) {
         localStorage.removeItem('access_token');
         localStorage.removeItem('user');
+        if (typeof Sidebar !== 'undefined') Sidebar.render();
+        if (typeof Topbar !== 'undefined') Topbar.render('/login');
         window.location.hash = '#/login';
         return null;
       }

@@ -8,7 +8,10 @@ const ReportsPage = (() => {
     return `
       <div class="page-header flex-between">
         <h3 style="margin:0">📝 员工日报</h3>
-        <button class="btn btn-primary" id="btn-new-report">+ 写日报</button>
+        <div class="flex-center gap-8">
+          <button class="btn" id="btn-voice-report">🎙 语音转日报</button>
+          <button class="btn btn-primary" id="btn-new-report">+ 写日报</button>
+        </div>
       </div>
       <div id="reports-table" class="table-container mt-16">
         <div class="page-loading">加载中...</div>
@@ -18,6 +21,7 @@ const ReportsPage = (() => {
 
   async function onMount() {
     document.getElementById('btn-new-report').onclick = openCreateModal;
+    document.getElementById('btn-voice-report').onclick = openVoiceModal;
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     currentEmpId = user.id;
     load();
@@ -100,6 +104,59 @@ const ReportsPage = (() => {
   function statusTag(s) {
     const map = { '已提交': 'tag-green', '草稿': 'tag-orange' };
     return `<span class="tag ${map[s] || 'tag-blue'}">${esc(s)}</span>`;
+  }
+
+  function openVoiceModal() {
+    Modal.show({
+      title: '语音转日报',
+      body: `
+        <p class="text-muted mb-16">输入口述的工作内容，AI 将自动生成结构化日报</p>
+        <div class="form-group">
+          <label>口述内容 <span class="text-error">*</span></label>
+          <textarea id="voice-text" class="textarea" rows="6" placeholder="例如：今天上午跟进了3个意向客户，下午参加了市场部周会，整理了本周的客户数据报表..."></textarea>
+        </div>
+        <div id="voice-preview"></div>
+      `,
+      confirmText: '生成日报预览',
+      onConfirm: async () => {
+        const text = document.getElementById('voice-text').value.trim();
+        if (!text) { Toast.show('请输入口述内容', 'warning'); return; }
+        const preview = document.getElementById('voice-preview');
+        preview.innerHTML = '<div class="page-loading">AI 解析中...</div>';
+        try {
+          const data = await API.post('/api/enterprise/voice-report', { message: text });
+          if (data.success && data.report) {
+            const r = data.report;
+            preview.innerHTML = `
+              <div class="card mt-16" style="border:2px solid var(--color-success)">
+                <h4 style="margin-bottom:12px;color:var(--color-success)">AI 解析结果</h4>
+                <div class="info-grid">
+                  <div class="info-item"><span class="info-item__label">日期</span><span class="info-item__value">${esc(r.report_date || '-')}</span></div>
+                  <div class="info-item"><span class="info-item__label">工作类型</span><span class="info-item__value">${esc(r.work_type || '-')}</span></div>
+                  <div class="info-item" style="grid-column:span 2"><span class="info-item__label">摘要</span><span class="info-item__value">${esc(r.summary || '-')}</span></div>
+                  <div class="info-item" style="grid-column:span 2"><span class="info-item__label">待办事项</span><span class="info-item__value">${esc(r.todos || '-')}</span></div>
+                </div>
+                <button class="btn btn-primary mt-16" id="btn-submit-voice">确认提交日报</button>
+              </div>
+            `;
+            document.getElementById('btn-submit-voice').onclick = async () => {
+              const user = JSON.parse(localStorage.getItem('user') || '{}');
+              await API.post('/api/enterprise/report', {
+                employee_id: user.id,
+                report_date: r.report_date || new Date().toISOString().slice(0,10),
+                work_type: r.work_type || '其他',
+                content: [r.summary, r.todos].filter(Boolean).join('\n待办：'),
+              });
+              Toast.show('日报提交成功', 'success');
+              Modal.hide();
+              load();
+            };
+          }
+        } catch (e) {
+          preview.innerHTML = `<div class="page-error">解析失败: ${e.message}</div>`;
+        }
+      },
+    });
   }
 
   function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }

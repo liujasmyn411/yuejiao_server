@@ -51,6 +51,7 @@ const NotificationsPage = (() => {
         btn.onclick = async () => {
           try {
             await API.put(`/api/student/notification/${btn.dataset.id}/read?recipient_id=${userId}`, {});
+            Toast.show('已标记为已读', 'success');
             load(userId);
             Topbar.updateUnread();
           } catch (e) { Toast.show(e.message, 'error'); }

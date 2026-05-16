@@ -54,17 +54,12 @@ const ProfileMatchPage = (() => {
     const results = document.getElementById('match-results');
     results.innerHTML = '<div class="page-loading">匹配中...</div>';
     try {
-      const data = await API.post('/api/customer/profile-match', { age, education, intended_country }, false);
-      // API expects query params, let's use URL params instead
       const params = new URLSearchParams();
       if (age) params.set('age', age);
       if (education) params.set('education', education);
       if (intended_country) params.set('intended_country', intended_country);
-      const resp = await fetch(`/api/customer/profile-match?${params.toString()}`, {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('access_token')}` }
-      });
-      const json = await resp.json();
-      const matches = json.matches || [];
+      const data = await API.post(`/api/customer/profile-match?${params.toString()}`, null);
+      const matches = data.matches || [];
       if (!matches.length) {
         results.innerHTML = '<div class="page-placeholder"><div class="placeholder-icon">🔍</div><h3>暂无匹配项目</h3><p>尝试调整筛选条件</p></div>';
         return;

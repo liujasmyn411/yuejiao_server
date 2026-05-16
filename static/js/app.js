@@ -22,12 +22,18 @@ const App = (() => {
     Router.register('/leave', LeavePage.render, { requireAuth: true, onMount: LeavePage.onMount });
     Router.register('/feedback', FeedbackPage.render, { requireAuth: true, onMount: FeedbackPage.onMount });
     Router.register('/notifications', NotificationsPage.render, { requireAuth: true, onMount: NotificationsPage.onMount });
+    Router.register('/psych-alert', PsychAlertsPage.render, { requireAuth: true, onMount: PsychAlertsPage.onMount });
+    Router.register('/reports-center', ReportsCenterPage.render, { requireAuth: true, onMount: ReportsCenterPage.onMount });
+    Router.register('/student-info', StudentInfoPage.render, { requireAuth: true, onMount: StudentInfoPage.onMount });
+    Router.register('/nl2sql', Nl2sqlPage.render, { requireAuth: true, onMount: Nl2sqlPage.onMount });
 
     const token = localStorage.getItem('access_token');
+    const initialPath = location.hash.slice(1) || (token ? '/dashboard' : '/login');
+
     if (token) {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       Sidebar.render();
-      Topbar.render('/dashboard');
+      Topbar.render(initialPath);
       Topbar.updateUnread();
       const agentMap = { STUDENT: 'student', EMPLOYEE: 'enterprise', ADMIN: 'enterprise' };
       ChatWidget.setAgent(agentMap[user.user_type] || 'customer', user.id);

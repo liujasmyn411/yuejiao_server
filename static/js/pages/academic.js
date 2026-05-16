@@ -24,6 +24,10 @@ const AcademicPage = (() => {
 
   async function onMount() {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
+    if (!user.id) {
+      document.getElementById('academic-table').innerHTML = '<div class="page-placeholder"><div class="placeholder-icon">📋</div><h3>请先登录</h3></div>';
+      return;
+    }
 
     document.querySelectorAll('#academic-filter .filter-tab').forEach(tab => {
       tab.onclick = () => {

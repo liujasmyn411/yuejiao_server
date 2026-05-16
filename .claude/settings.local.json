@@ -2,7 +2,28 @@
   "permissions": {
     "allow": [
       "Bash(rm -f d:/yuejiao_agents/test.db)",
-      "Bash(python -m pytest tests/ -v --tb=short)"
+      "Bash(python -m pytest tests/ -v --tb=short)",
+      "Bash(python -c \"from utils.auth import hash_password; import json; users = {'admin': hash_password\\('admin123'\\), '员工1': hash_password\\('123456'\\), '员工2': hash_password\\('123456'\\), '员工3': hash_password\\('123456'\\), '员工4': hash_password\\('123456'\\), '员工5': hash_password\\('123456'\\), '学生4': hash_password\\('123456'\\), '学生5': hash_password\\('123456'\\)}; print\\(json.dumps\\(users, indent=2, ensure_ascii=False\\)\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(python _gen_users_sql.py)",
+      "Bash(.venv/Scripts/python -c \"import bcrypt; print\\(bcrypt.__version__\\)\")",
+      "Bash(.venv/Scripts/python -c \"import passlib; print\\(passlib.__version__\\)\")",
+      "Bash(.venv/Scripts/pip install *)",
+      "Bash(python main.py)",
+      "Bash(curl -s http://localhost:8000/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/static/js/router.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/static/js/app.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/static/js/pages/login.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/static/js/pages/dashboard.js)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8000/static/js/pages/leads.js)",
+      "Bash(curl -s -X POST http://localhost:8000/api/login -H \"Content-Type: application/json\" -d '{\"username\":\"admin\",\"password\":\"admin123\"}')",
+      "Bash(start http://localhost:8000/)",
+      "Bash(curl -s http://localhost:8000/static/js/router.js)",
+      "Bash(curl -s http://localhost:8000/static/js/app.js)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(curl -s http://localhost:8000/api/health)",
+      "Bash(pip install *)",
+      "Bash(pip list *)"
     ]
   }
 }

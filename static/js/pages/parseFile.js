@@ -60,6 +60,7 @@ const ParseFilePage = (() => {
           <div class="parse-profile">
             ${renderProfileFields(profile)}
           </div>
+          Toast.show('文件解析成功', 'success');
           ${data.text ? `
             <details class="mt-16">
               <summary style="cursor:pointer;color:var(--color-text-secondary);font-weight:600">查看原始文本</summary>

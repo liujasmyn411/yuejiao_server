@@ -9,7 +9,13 @@
       "Bash(python -m json.tool)",
       "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d \"{\\\\\"message\\\\\":\\\\\"帮我查今天的日报\\\\\"}\")",
       "Bash(curl -s -X POST http://localhost:8000/api/chat -H \"Content-Type: application/json\" -d \"{\\\\\"message\\\\\":\\\\\"我最近压力很大\\\\\"}\")",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(python -c ' *)",
+      "Bash(node -c static/js/pages/psychAlerts.js)",
+      "Bash(node -c static/js/pages/reportsCenter.js)",
+      "Bash(node -c static/js/pages/studentInfo.js)",
+      "Bash(node -c static/js/pages/nl2sql.js)",
+      "Bash(node -c static/js/api.js)"
     ]
   }
 }

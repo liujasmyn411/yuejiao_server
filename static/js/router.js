@@ -5,29 +5,46 @@
 const Router = (() => {
   const pages = {};
   let currentPage = null;
+  let navigating = false;
 
   function register(path, renderFn, meta = {}) {
     pages[path] = { render: renderFn, meta };
   }
 
   async function navigate(path) {
+    // 防止重复导航到同一页面
+    if (navigating) return;
+    if (currentPage === path) return;
+
     const page = pages[path];
     if (!page) {
-      navigate('/login');
+      // 页面未注册，跳转到登录页
+      redirectTo('/login');
       return;
     }
+
     // 需要登录的页面
     if (page.meta.requireAuth && !API.getToken()) {
-      navigate('/login');
+      redirectTo('/login');
       return;
     }
+
+    navigating = true;
     currentPage = path;
+
+    // 同步 URL hash（不触发 hashchange 的 navigate 调用）
+    const hashPath = '#' + path;
+    if (location.hash !== hashPath) {
+      location.hash = hashPath;
+    }
+
     const content = document.getElementById('content');
+    if (!content) { navigating = false; return; }
+
     content.innerHTML = '<div class="page-loading">加载中...</div>';
     try {
       const html = await page.render();
       content.innerHTML = html;
-      // 触发页面初始化钩子
       if (typeof page.meta.onMount === 'function') {
         page.meta.onMount();
       }
@@ -36,6 +53,27 @@ const Router = (() => {
       console.error(err);
     }
     Sidebar.setActive(path);
+    // 更新顶栏标题
+    const titleEl = document.querySelector('.topbar__title');
+    if (titleEl) {
+      const titles = {
+        '/dashboard': '仪表盘', '/events': '活动讲座', '/projects': '课程项目',
+        '/profile-match': '画像研判', '/parse-file': '文件解析',
+        '/leads': 'CRM客户管理', '/reports': '员工日报', '/scores': '成绩管理',
+        '/employees': '员工通讯录', '/approvals': '审批管理', '/org-chart': '组织架构',
+        '/academic': '教务DDL', '/study-abroad': '留学进度', '/leave': '请假申请',
+        '/feedback': '反馈工单', '/notifications': '通知中心',
+        '/psych-alert': '心理预警', '/reports-center': '报表中心',
+        '/student-info': '学生信息', '/nl2sql': 'NL2SQL查询',
+        '/login': '登录',
+      };
+      titleEl.textContent = titles[path] || '粤教服务';
+    }
+    navigating = false;
+  }
+
+  function redirectTo(path) {
+    location.hash = '#' + path;
   }
 
   function init() {
@@ -43,8 +81,16 @@ const Router = (() => {
       const path = location.hash.slice(1) || '/login';
       navigate(path);
     });
-    const path = location.hash.slice(1) || '/login';
-    navigate(path);
+
+    // 初始路由：已有 token 则默认去 dashboard，否则去 login
+    const path = location.hash.slice(1);
+    if (path) {
+      navigate(path);
+    } else if (API.getToken()) {
+      navigate('/dashboard');
+    } else {
+      navigate('/login');
+    }
   }
 
   return { register, navigate, init, pages };

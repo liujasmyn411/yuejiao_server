@@ -52,6 +52,9 @@ const EventsPage = (() => {
           <button class="btn btn-primary btn-block mt-16 btn-register" data-event='${esc(JSON.stringify(e))}'>
             ${e.max_participants && e.current_participants >= e.max_participants ? '已满' : '立即报名'}
           </button>
+          <button class="btn btn-block mt-8 btn-view-regs" data-event-id="${e.id}" data-event-name="${esc(e.event_name)}">
+            查看报名 (${e.current_participants || 0})
+          </button>
         </div>
       `).join('');
 
@@ -63,6 +66,9 @@ const EventsPage = (() => {
           }
           openRegisterModal(event);
         };
+      });
+      grid.querySelectorAll('.btn-view-regs').forEach(btn => {
+        btn.onclick = () => viewRegistrations(btn.dataset.eventId, btn.dataset.eventName);
       });
     } catch (e) {
       document.getElementById('events-grid').innerHTML = `<div class="page-error">加载失败: ${e.message}</div>`;
@@ -95,7 +101,7 @@ const EventsPage = (() => {
         try {
           await API.post('/api/customer/events/register', {
             event_id: event.id,
-            customer_id: 1,
+            customer_id: 0,
             customer_name: name,
             contact: contact,
           });
@@ -104,6 +110,51 @@ const EventsPage = (() => {
         } catch (e) { Toast.show(e.message, 'error'); }
       },
     });
+  }
+
+  async function viewRegistrations(eventId, eventName) {
+    const modalBody = document.createElement('div');
+    modalBody.innerHTML = '<div class="page-loading">加载中...</div>';
+    Modal.show({
+      title: `报名列表 — ${eventName}`,
+      body: modalBody.innerHTML,
+      confirmText: '关闭',
+      onConfirm: () => {},
+    });
+    try {
+      const data = await API.get(`/api/customer/events/${eventId}/registrations`);
+      const regs = data.registrations || [];
+      if (!regs.length) {
+        document.querySelector('.modal__body').innerHTML = '<div class="page-placeholder"><div class="placeholder-icon">📭</div><h3>暂无报名记录</h3></div>';
+        return;
+      }
+      document.querySelector('.modal__body').innerHTML = `
+        <div class="table-container">
+          <table class="table">
+            <thead><tr><th>ID</th><th>姓名</th><th>联系方式</th><th>状态</th><th>签到</th><th>报名时间</th></tr></thead>
+            <tbody>
+              ${regs.map(r => `
+                <tr>
+                  <td>${r.id}</td>
+                  <td><strong>${esc(r.customer_name)}</strong></td>
+                  <td>${esc(r.contact || '-')}</td>
+                  <td>${statusTag(r.status)}</td>
+                  <td>${r.check_in_status ? '<span class="tag tag-green">已签到</span>' : '<span class="tag tag-orange">未签到</span>'}</td>
+                  <td>${(r.create_time || '').slice(0,10)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      `;
+    } catch (e) {
+      document.querySelector('.modal__body').innerHTML = `<div class="page-error">加载失败: ${e.message}</div>`;
+    }
+  }
+
+  function statusTag(s) {
+    const map = { '已报名': 'tag-green', '已取消': 'tag-red' };
+    return `<span class="tag ${map[s] || 'tag-blue'}">${esc(s)}</span>`;
   }
 
   function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
