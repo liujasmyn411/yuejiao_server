@@ -15,7 +15,8 @@
       "Bash(node -c static/js/pages/reportsCenter.js)",
       "Bash(node -c static/js/pages/studentInfo.js)",
       "Bash(node -c static/js/pages/nl2sql.js)",
-      "Bash(node -c static/js/api.js)"
+      "Bash(node -c static/js/api.js)",
+      "Bash(node -c static/js/router.js)"
     ]
   }
 }

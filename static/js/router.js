@@ -41,6 +41,20 @@ const Router = (() => {
     const content = document.getElementById('content');
     if (!content) { navigating = false; return; }
 
+    // 登录页隐藏 sidebar/topbar，其他页面显示
+    const sidebar = document.getElementById('sidebar');
+    const topbar = document.getElementById('topbar');
+    const mainArea = document.querySelector('.main-area');
+    if (path === '/login') {
+      if (sidebar) sidebar.style.display = 'none';
+      if (topbar) topbar.style.display = 'none';
+      if (mainArea) mainArea.style.marginLeft = '0';
+    } else {
+      if (sidebar) sidebar.style.display = '';
+      if (topbar) topbar.style.display = '';
+      if (mainArea) mainArea.style.marginLeft = '';
+    }
+
     content.innerHTML = '<div class="page-loading">加载中...</div>';
     try {
       const html = await page.render();
@@ -52,7 +66,9 @@ const Router = (() => {
       content.innerHTML = `<div class="page-error">页面加载失败: ${err.message}</div>`;
       console.error(err);
     }
-    Sidebar.setActive(path);
+    if (path !== '/login') {
+      Sidebar.setActive(path);
+    }
     // 更新顶栏标题
     const titleEl = document.querySelector('.topbar__title');
     if (titleEl) {
