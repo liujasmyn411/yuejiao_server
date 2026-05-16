@@ -15,12 +15,6 @@ from utils.auth import verify_password, create_access_token
 router = APIRouter(tags=["系统"])
 
 
-@router.get("/")
-def root():
-    """服务根路径"""
-    return {"msg": "粤教服务AI Agent API运行中", "status": "ok"}
-
-
 @router.get("/health")
 def health_check():
     """健康检查"""

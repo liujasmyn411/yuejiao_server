@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>粤教服务 AI Agent</title>
+  <link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+  <div id="app">
+    <!-- 侧边栏 -->
+    <aside id="sidebar" class="sidebar"></aside>
+
+    <!-- 主区域 -->
+    <div class="main-area">
+      <!-- 顶栏 -->
+      <header id="topbar" class="topbar"></header>
+      <!-- 内容区 -->
+      <main id="content" class="content"></main>
+    </div>
+
+    <!-- 聊天浮窗 -->
+    <div id="chat-widget" class="chat-widget hidden">
+      <div class="chat-widget__header">
+        <span id="chat-title">AI 助手</span>
+        <div class="chat-widget__actions">
+          <button id="chat-minimize" class="btn-icon">─</button>
+          <button id="chat-close" class="btn-icon">✕</button>
+        </div>
+      </div>
+      <div id="chat-messages" class="chat-widget__messages"></div>
+      <div class="chat-widget__input">
+        <textarea id="chat-input" rows="1" placeholder="输入消息..."></textarea>
+        <button id="chat-send" class="btn btn-primary btn-sm">发送</button>
+      </div>
+    </div>
+    <button id="chat-toggle" class="chat-toggle btn btn-primary">💬 AI助手</button>
+  </div>
+
+  <!-- Toast 容器 -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- JS 模块 -->
+  <script src="/static/js/api.js"></script>
+  <script src="/static/js/router.js"></script>
+  <script src="/static/js/components/sidebar.js"></script>
+  <script src="/static/js/components/topbar.js"></script>
+  <script src="/static/js/components/toast.js"></script>
+  <script src="/static/js/components/modal.js"></script>
+  <script src="/static/js/components/chat.js"></script>
+  <script src="/static/js/pages/login.js"></script>
+  <script src="/static/js/pages/dashboard.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>

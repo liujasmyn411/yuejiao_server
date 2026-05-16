@@ -7,8 +7,10 @@
 """
 
 import logging
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from utils import setup_logging
 from utils.scheduler import start_scheduler
@@ -44,17 +46,38 @@ app.add_middleware(
 # 注册路由
 app.include_router(router)
 
+# 挂载静态文件目录
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Jinja2 模板
+templates = Jinja2Templates(directory="templates")
+
+# 前端入口 —— 所有页面路由走 index.html
+@app.get("/")
+async def serve_root(request: Request):
+    return templates.TemplateResponse("index.html", {"request": request})
+
+
+@app.get("/{full_path:path}")
+async def serve_frontend(request: Request, full_path: str):
+    # 只处理 HTML 页面请求，API / static 路径会被前面的路由拦截
+    if full_path.startswith("api/") or full_path.startswith("static/") or full_path == "health" or full_path == "favicon.ico":
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse("index.html", {"request": request})
+
 
 # ==================== 初始化测试数据 ====================
 
 def init_sample_data():
     """启动时自动插入测试数据（仅首次）"""
     from datetime import datetime
+    from model import SysUser
 
     db = SessionLocal()
     try:
         # 检查是否已有数据（任一核心表为空则初始化）
         has_data = (
+            db.query(SysUser).count() > 0 and
             db.query(EventLecture).count() > 0 and
             db.query(StudentAcademic).count() > 0 and
             db.query(StudentStudyAbroadProgress).count() > 0 and
@@ -62,6 +85,39 @@ def init_sample_data():
         )
         if not has_data:
             logger.info("正在初始化测试数据...")
+
+            # --- 测试用户 ---
+            from utils.auth import hash_password
+            users = [
+                SysUser(username="admin", password_hash=hash_password("admin123"),
+                        real_name="管理员", user_type="ADMIN", employee_role="系统管理员",
+                        department="粤教服务", contact_info="13800000000", email="admin@yuejiao.edu"),
+                SysUser(username="员工1", password_hash=hash_password("123456"),
+                        real_name="张建国", user_type="EMPLOYEE", employee_role="班主任",
+                        department="销售部", contact_info="13800000001", email="zhangjg@yuejiao.edu"),
+                SysUser(username="员工2", password_hash=hash_password("123456"),
+                        real_name="李明", user_type="EMPLOYEE", employee_role="市场专员",
+                        department="市场部", contact_info="13800000002", email="liming@yuejiao.edu"),
+                SysUser(username="员工3", password_hash=hash_password("123456"),
+                        real_name="王芳", user_type="EMPLOYEE", employee_role="教务主管",
+                        department="教务部", contact_info="13800000003", email="wangfang@yuejiao.edu"),
+                SysUser(username="员工4", password_hash=hash_password("123456"),
+                        real_name="王强", user_type="EMPLOYEE", employee_role="留学顾问",
+                        department="留学服务部", contact_info="13800000004", email="wangqiang@yuejiao.edu"),
+                SysUser(username="员工5", password_hash=hash_password("123456"),
+                        real_name="陈美玲", user_type="EMPLOYEE", employee_role="客服专员",
+                        department="客服部", contact_info="13800000005", email="chenml@yuejiao.edu"),
+                SysUser(username="学生4", password_hash=hash_password("123456"),
+                        real_name="赵小明", user_type="STUDENT", head_teacher_id=2,
+                        department="计算机系", contact_info="13900000004", email="zhaoxm@stu.yuejiao.edu"),
+                SysUser(username="学生5", password_hash=hash_password("123456"),
+                        real_name="钱小红", user_type="STUDENT", head_teacher_id=2,
+                        department="商学院", contact_info="13900000005", email="qianxh@stu.yuejiao.edu"),
+            ]
+            for u in users:
+                db.add(u)
+            db.flush()
+            logger.info("测试用户已创建")
 
             # 示例活动
             events = [
@@ -130,22 +186,22 @@ def init_sample_data():
             leads = [
                 CrmLead(customer_name="张三", contact_info="13800138000",
                         background_info="19岁，高中生，家里经济条件好",
-                        status="新增意向", owner_employee_id=1),
+                        status="新增意向", owner_employee_id=2),
                 CrmLead(customer_name="李四", contact_info="13900139000",
                         background_info="28岁，本科学历，想移民德国",
-                        status="跟进中", owner_employee_id=1),
+                        status="跟进中", owner_employee_id=2),
                 CrmLead(customer_name="王五", contact_info="13700137000",
                         background_info="17岁，职高毕业，想找工作",
-                        status="新增意向", owner_employee_id=1),
+                        status="新增意向", owner_employee_id=2),
             ]
             for l in leads:
                 db.add(l)
 
             # 示例日报
             reports = [
-                EmployeeDailyReport(employee_id=1, report_date="2026-05-12",
+                EmployeeDailyReport(employee_id=2, report_date="2026-05-12",
                                     content="今天跟进3个客户。张三对新加坡项目意向强烈，已安排下周面试；李四还在考虑费用问题；王五决定不报，已标记流失。"),
-                EmployeeDailyReport(employee_id=1, report_date="2026-05-11",
+                EmployeeDailyReport(employee_id=2, report_date="2026-05-11",
                                     content="参加了新加坡项目培训会，更新了政策知识。新增2个意向客户，都来自线上咨询。"),
             ]
             for r in reports:
@@ -153,20 +209,20 @@ def init_sample_data():
 
             # 示例教务数据
             academics = [
-                StudentAcademic(student_id=4, course_name="高等数学（下）", academic_type="考试",
+                StudentAcademic(student_id=7, course_name="高等数学（下）", academic_type="考试",
                                title="高等数学（下）期末考试", description="涵盖微积分、线性代数，闭卷笔试",
                                exam_location="教学楼A301",
                                deadline=datetime(2026, 6, 20, 9, 0), duration_minutes=120,
                                semester="2025-2026第二学期"),
-                StudentAcademic(student_id=4, course_name="Python程序设计", academic_type="项目",
+                StudentAcademic(student_id=7, course_name="Python程序设计", academic_type="项目",
                                title="图书管理系统大作业", description="独立完成一个带GUI的图书管理系统",
                                deadline=datetime(2026, 6, 10, 23, 59),
                                semester="2025-2026第二学期"),
-                StudentAcademic(student_id=4, course_name="大学英语", academic_type="论文",
+                StudentAcademic(student_id=7, course_name="大学英语", academic_type="论文",
                                title="跨文化交际课程论文", description="3000词英文论文，格式APA",
                                deadline=datetime(2026, 6, 5, 23, 59),
                                semester="2025-2026第二学期"),
-                StudentAcademic(student_id=5, course_name="综合英语", academic_type="考试",
+                StudentAcademic(student_id=8, course_name="综合英语", academic_type="考试",
                                title="综合英语期末考试", description="听力+阅读+写作+翻译",
                                exam_location="教学楼B102",
                                deadline=datetime(2026, 6, 18, 14, 0), duration_minutes=150,
@@ -178,7 +234,7 @@ def init_sample_data():
             # 示例留学进度
             progresses = [
                 StudentStudyAbroadProgress(
-                    student_id=4, target_country="英国", target_school="帝国理工学院",
+                    student_id=7, target_country="英国", target_school="帝国理工学院",
                     target_major="计算机科学", degree_level="硕士",
                     stage="文书准备", stage_order=1, stage_status="已完成",
                     stage_detail="个人陈述初稿已完成，推荐信已联系2位教授",
@@ -186,7 +242,7 @@ def init_sample_data():
                     estimated_complete_date="2026-05-10", actual_complete_date="2026-05-08",
                     is_current=0),
                 StudentStudyAbroadProgress(
-                    student_id=4, target_country="英国", target_school="帝国理工学院",
+                    student_id=7, target_country="英国", target_school="帝国理工学院",
                     target_major="计算机科学", degree_level="硕士",
                     stage="文书审核", stage_order=2, stage_status="已完成",
                     stage_detail="文书老师已完成一审",
@@ -194,14 +250,14 @@ def init_sample_data():
                     estimated_complete_date="2026-05-15", actual_complete_date="2026-05-14",
                     is_current=0),
                 StudentStudyAbroadProgress(
-                    student_id=4, target_country="英国", target_school="帝国理工学院",
+                    student_id=7, target_country="英国", target_school="帝国理工学院",
                     target_major="计算机科学", degree_level="硕士",
                     stage="院校申请", stage_order=3, stage_status="进行中",
                     stage_detail="已提交在线申请表，材料完整待审核",
                     handler_name="王强", handler_contact="wangqiang@yuejiao.edu",
                     estimated_complete_date="2026-05-30", is_current=1),
                 StudentStudyAbroadProgress(
-                    student_id=5, target_country="新加坡", target_school="新加坡国立大学",
+                    student_id=8, target_country="新加坡", target_school="新加坡国立大学",
                     target_major="商科", degree_level="本科",
                     stage="文书准备", stage_order=1, stage_status="已完成",
                     stage_detail="个人陈述初稿完成，推荐信1封已到位",
@@ -209,7 +265,7 @@ def init_sample_data():
                     estimated_complete_date="2026-05-20", actual_complete_date="2026-05-18",
                     is_current=0),
                 StudentStudyAbroadProgress(
-                    student_id=5, target_country="新加坡", target_school="新加坡国立大学",
+                    student_id=8, target_country="新加坡", target_school="新加坡国立大学",
                     target_major="商科", degree_level="本科",
                     stage="文书审核", stage_order=2, stage_status="进行中",
                     stage_detail="文书老师已反馈初稿意见，需补充课外活动经历",
