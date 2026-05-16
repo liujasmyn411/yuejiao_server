@@ -56,3 +56,21 @@ def get_current_user(
     if user is None:
         raise HTTPException(status_code=401, detail="用户不存在或已注销")
     return user
+
+
+def require_student(
+    current_user: "SysUser" = Depends(get_current_user),
+):
+    """只允许 STUDENT 角色访问"""
+    if current_user.user_type != "STUDENT":
+        raise HTTPException(status_code=403, detail="仅学生可访问此接口")
+    return current_user
+
+
+def require_employee_or_admin(
+    current_user: "SysUser" = Depends(get_current_user),
+):
+    """只允许 EMPLOYEE 或 ADMIN 角色访问"""
+    if current_user.user_type not in ("EMPLOYEE", "ADMIN"):
+        raise HTTPException(status_code=403, detail="仅员工/管理员可访问此接口")
+    return current_user

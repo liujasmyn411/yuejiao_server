@@ -8,8 +8,6 @@ from sqlalchemy.orm import Session
 from database import get_db
 from schemas import EventRegisterRequest
 from crud import EventCRUD, ProjectCRUD
-from utils.auth import get_current_user
-from model import SysUser
 
 router = APIRouter(prefix="/api/customer", tags=["客服Agent"])
 
@@ -34,7 +32,7 @@ def list_events(db: Session = Depends(get_db)):
 
 
 @router.post("/events/register")
-def register_event(req: EventRegisterRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+def register_event(req: EventRegisterRequest, db: Session = Depends(get_db)):
     """活动报名"""
     event = EventCRUD.get_by_id(db, req.event_id)
     if not event:

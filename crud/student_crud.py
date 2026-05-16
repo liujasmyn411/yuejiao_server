@@ -51,6 +51,21 @@ class UserCRUD:
         ).first()
 
     @staticmethod
+    def validate_head_teacher(db: Session, head_teacher_id: int):
+        """校验班主任ID：必须存在、未删除、user_type=EMPLOYEE、employee_role='班主任'"""
+        if head_teacher_id is None:
+            raise ValueError("班主任ID为必填")
+        teacher = db.query(SysUser).filter(
+            SysUser.id == head_teacher_id,
+            SysUser.delete_flag == 0,
+            SysUser.user_type == "EMPLOYEE",
+            SysUser.employee_role == "班主任"
+        ).first()
+        if not teacher:
+            raise ValueError(f"班主任不存在或无权限(id={head_teacher_id})，须为EMPLOYEE且employee_role='班主任'")
+        return teacher
+
+    @staticmethod
     def update(db: Session, user_id: int, **kwargs):
         """更新用户信息（仅更新非None字段）"""
         user = UserCRUD.get_by_id(db, user_id)

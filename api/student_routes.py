@@ -15,7 +15,7 @@ from crud import (
     UserCRUD, StudentServiceCRUD, FeedbackCRUD, PsychAlertCRUD,
     AcademicCRUD, StudyAbroadCRUD
 )
-from utils.auth import get_current_user
+from utils.auth import get_current_user, require_student
 from model import SysUser
 
 
@@ -35,7 +35,7 @@ def _validate_student(student_id: int, db: Session):
 
 # ---- 根据id查询学生信息 ----
 @router.get("/api/student/info")
-def get_student_info(student_id: int, db: Session = Depends(get_db)):
+def get_student_info(student_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """根据ID查询学生基本信息"""
     student = _validate_student(student_id, db)
     return {
@@ -52,7 +52,7 @@ def get_student_info(student_id: int, db: Session = Depends(get_db)):
 
 # ---- 请假: 提交 ----
 @router.post("/api/student/leave")
-def create_leave(req: LeaveCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+def create_leave(req: LeaveCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_student)):
     """学生提交请假申请"""
     _validate_student(req.student_id, db)
     try:
@@ -65,7 +65,7 @@ def create_leave(req: LeaveCreateRequest, db: Session = Depends(get_db), current
 
 # ---- 请假: 查询 ----
 @router.get("/api/student/leave")
-def list_leaves(student_id: int = 0, db: Session = Depends(get_db)):
+def list_leaves(student_id: int = 0, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """查询请假记录"""
     if student_id:
         _validate_student(student_id, db)
@@ -80,7 +80,7 @@ def list_leaves(student_id: int = 0, db: Session = Depends(get_db)):
 
 # ---- 投诉反馈: 提交 ----
 @router.post("/api/student/feedback")
-def create_feedback(req: FeedbackCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+def create_feedback(req: FeedbackCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_student)):
     """学生提交投诉反馈"""
     _validate_student(req.student_id, db)
     ticket = FeedbackCRUD.create(db, req)
@@ -90,7 +90,7 @@ def create_feedback(req: FeedbackCreateRequest, db: Session = Depends(get_db), c
 
 # ---- 投诉反馈: 查询 ----
 @router.get("/api/student/feedback")
-def list_feedback(student_id: int = 0, db: Session = Depends(get_db)):
+def list_feedback(student_id: int = 0, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """查询投诉反馈列表"""
     if student_id:
         _validate_student(student_id, db)
@@ -105,7 +105,7 @@ def list_feedback(student_id: int = 0, db: Session = Depends(get_db)):
 
 # ---- 心理预警: 提交 ----
 @router.post("/api/student/psych-alert")
-def create_psych_alert(req: PsychAlertCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+def create_psych_alert(req: PsychAlertCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_student)):
     """提交心理预警"""
     _validate_student(req.student_id, db)
     alert = PsychAlertCRUD.create(db, req)
@@ -117,7 +117,7 @@ def create_psych_alert(req: PsychAlertCreateRequest, db: Session = Depends(get_d
 
 # ---- 心理预警: 查询 ----
 @router.get("/api/student/psych-alert")
-def list_psych_alerts(risk_level: RiskLevelEnum = None, db: Session = Depends(get_db)):
+def list_psych_alerts(risk_level: RiskLevelEnum = None, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """查询心理预警列表"""
     alerts = PsychAlertCRUD.get_all(db, risk_level.value if risk_level else "")
     return {"alerts": [
@@ -131,7 +131,7 @@ def list_psych_alerts(risk_level: RiskLevelEnum = None, db: Session = Depends(ge
 # ==================== 学业考务接口 ====================
 
 @router.get("/api/student/academic")
-def list_academic(student_id: int, academic_type: str = "", db: Session = Depends(get_db)):
+def list_academic(student_id: int, academic_type: str = "", db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """查询学生教务信息（考试/论文DDL/作业）"""
     _validate_student(student_id, db)
     items = AcademicCRUD.get_by_student(db, student_id, academic_type)
@@ -150,7 +150,7 @@ def list_academic(student_id: int, academic_type: str = "", db: Session = Depend
 
 
 @router.get("/api/student/academic/upcoming")
-def list_upcoming_academic(student_id: int, days: int = 14, db: Session = Depends(get_db)):
+def list_upcoming_academic(student_id: int, days: int = 14, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """查询即将到来的DDL（未来N天内的考试/论文/作业）"""
     _validate_student(student_id, db)
     items = AcademicCRUD.get_upcoming(db, student_id, days)
@@ -168,7 +168,7 @@ def list_upcoming_academic(student_id: int, days: int = 14, db: Session = Depend
 # ==================== 留学进度追踪接口 ====================
 
 @router.get("/api/student/study-abroad")
-def list_study_abroad_progress(student_id: int, db: Session = Depends(get_db)):
+def list_study_abroad_progress(student_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """查询学生留学业务全流程进度"""
     _validate_student(student_id, db)
     items = StudyAbroadCRUD.get_by_student(db, student_id)
@@ -191,7 +191,7 @@ def list_study_abroad_progress(student_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/api/student/study-abroad/current")
-def get_current_stage(student_id: int, db: Session = Depends(get_db)):
+def get_current_stage(student_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
     """查询学生当前所处的留学进度阶段"""
     _validate_student(student_id, db)
     stage = StudyAbroadCRUD.get_current_stage(db, student_id)
@@ -213,7 +213,7 @@ def get_current_stage(student_id: int, db: Session = Depends(get_db)):
 # ==================== 学生助手对话接口 ====================
 
 @router.post("/api/student/chat")
-def student_chat(message: dict, db: Session = Depends(get_db)):
+def student_chat(message: dict, db: Session = Depends(get_db), current_user: SysUser = Depends(require_student)):
     """学生助手对话接口（支持7种意图）"""
     from agents.student.agent import StudentAgent
     agent = StudentAgent()

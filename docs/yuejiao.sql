@@ -22,8 +22,9 @@ CREATE TABLE sys_user (
     username VARCHAR(50) NOT NULL UNIQUE COMMENT '登录账号',
     password_hash VARCHAR(255) NOT NULL COMMENT '加密密码',
     real_name VARCHAR(30) NOT NULL COMMENT '真实姓名',
-    user_type VARCHAR(20) NOT NULL COMMENT 'STUDENT/EMPLOYEE',
+    user_type VARCHAR(20) NOT NULL COMMENT 'ADMIN/STUDENT/EMPLOYEE',
     employee_role VARCHAR(50) DEFAULT NULL COMMENT '员工角色',
+    head_teacher_id BIGINT DEFAULT NULL COMMENT '班主任ID（STUDENT必填，关联sys_user.id且该用户须为EMPLOYEE+班主任角色）',
     department VARCHAR(100) DEFAULT NULL COMMENT '部门/院系',
     contact_info VARCHAR(20) DEFAULT NULL COMMENT '手机号',
     email VARCHAR(100) DEFAULT NULL COMMENT '邮箱',
@@ -38,19 +39,21 @@ CREATE TABLE sys_user (
     delete_flag TINYINT DEFAULT 0 COMMENT '软删除 0=正常 1=删除',
     remark TEXT DEFAULT NULL COMMENT '备注',
     INDEX idx_user_type (user_type),
+    INDEX idx_head_teacher_id (head_teacher_id),
     INDEX idx_delete_flag (delete_flag)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='统一用户表';
 
 -- 1. 统一用户表（学生/员工） 测试数据
-INSERT INTO sys_user (id, username, password_hash, real_name, user_type, employee_role, department, contact_info, email, id_card, avatar, country_region, status, last_login_time, last_login_ip, create_time, update_time, delete_flag, remark) VALUES
-(1, 'admin001', 'pbkdf2:sha256:600000$...', '张伟', 'EMPLOYEE', '系统管理员', '信息技术部', '13800138001', 'zhangwei@yuejiao.edu', '440106199001011234', 'https://cdn.yuejiao.edu/avatar/admin001.jpg', '中国', '正常', '2026-05-11 14:30:00', '192.168.1.100', '2026-04-13 14:30:00', '2026-05-11 14:30:00', 0, '系统超级管理员'),
-(2, 'teacher_li', 'pbkdf2:sha256:600000$...', '李芳', 'EMPLOYEE', '心理咨询师', '学生事务中心', '13912345678', 'lifang@yuejiao.edu', '440106198805152345', 'https://cdn.yuejiao.edu/avatar/teacher_li.jpg', '中国', '正常', '2026-05-12 14:30:00', '192.168.1.101', '2026-04-18 14:30:00', '2026-05-12 14:30:00', 0, '负责学生心理健康辅导'),
-(3, 'teacher_wang', 'pbkdf2:sha256:600000$...', '王强', 'EMPLOYEE', '留学顾问', '国际教育中心', '13798765432', 'wangqiang@yuejiao.edu', '440106199203203456', 'https://cdn.yuejiao.edu/avatar/teacher_wang.jpg', '中国', '正常', '2026-05-08 14:30:00', '192.168.1.102', '2026-04-23 14:30:00', '2026-05-08 14:30:00', 0, '负责英美留学项目咨询'),
-(4, 'stu2024001', 'pbkdf2:sha256:600000$...', '陈小明', 'STUDENT', NULL, '计算机学院-软件工程2024级', '18620240001', 'chenxm@stu.yuejiao.edu', '440106200603154567', 'https://cdn.yuejiao.edu/avatar/stu2024001.jpg', '中国', '正常', '2026-05-10 14:30:00', '192.168.2.10', '2026-04-28 14:30:00', '2026-05-10 14:30:00', 0, '2024级新生，成绩优异'),
-(5, 'stu2024002', 'pbkdf2:sha256:600000$...', '林雨桐', 'STUDENT', NULL, '外国语学院-英语2024级', '18620240002', 'linyt@stu.yuejiao.edu', '440106200511264568', 'https://cdn.yuejiao.edu/avatar/stu2024002.jpg', '中国', '正常', '2026-05-06 14:30:00', '192.168.2.11', '2026-05-03 14:30:00', '2026-05-06 14:30:00', 0, '有出国留学意向'),
-(6, 'stu2023001', 'pbkdf2:sha256:600000$...', '赵子轩', 'STUDENT', NULL, '商学院-国际贸易2023级', '18620230001', 'zhaozx@stu.yuejiao.edu', '440106200409083456', 'https://cdn.yuejiao.edu/avatar/stu2023001.jpg', '中国', '正常', '2026-05-03 14:30:00', '192.168.2.12', '2026-03-14 14:30:00', '2026-05-03 14:30:00', 0, '大二学生，雅思备考中'),
-(7, 'sales_chen', 'pbkdf2:sha256:600000$...', '陈美玲', 'EMPLOYEE', '销售主管', '招生市场部', '13500135001', 'chenml@yuejiao.edu', '440106199510105678', 'https://cdn.yuejiao.edu/avatar/sales_chen.jpg', '中国', '正常', '2026-05-12 14:30:00', '192.168.1.103', '2026-04-25 14:30:00', '2026-05-12 14:30:00', 0, '负责华南地区招生'),
-(8, 'stu2024003', 'pbkdf2:sha256:600000$...', '周思琪', 'STUDENT', NULL, '艺术学院-视觉传达2024级', '18620240003', 'zhousq@stu.yuejiao.edu', '440106200702154321', 'https://cdn.yuejiao.edu/avatar/stu2024003.jpg', '中国', '正常', '2026-05-09 14:30:00', '192.168.2.13', '2026-05-01 14:30:00', '2026-05-09 14:30:00', 0, '设计专业新生');
+INSERT INTO sys_user (id, username, password_hash, real_name, user_type, employee_role, head_teacher_id, department, contact_info, email, id_card, avatar, country_region, status, last_login_time, last_login_ip, create_time, update_time, delete_flag, remark) VALUES
+(1, 'admin001', 'pbkdf2:sha256:600000$...', '张伟', 'ADMIN', NULL, NULL, '信息技术部', '13800138001', 'zhangwei@yuejiao.edu', '440106199001011234', 'https://cdn.yuejiao.edu/avatar/admin001.jpg', '中国', '正常', '2026-05-11 14:30:00', '192.168.1.100', '2026-04-13 14:30:00', '2026-05-11 14:30:00', 0, '系统超级管理员'),
+(2, 'teacher_li', 'pbkdf2:sha256:600000$...', '李芳', 'EMPLOYEE', '心理咨询师', NULL, '学生事务中心', '13912345678', 'lifang@yuejiao.edu', '440106198805152345', 'https://cdn.yuejiao.edu/avatar/teacher_li.jpg', '中国', '正常', '2026-05-12 14:30:00', '192.168.1.101', '2026-04-18 14:30:00', '2026-05-12 14:30:00', 0, '负责学生心理健康辅导'),
+(3, 'teacher_wang', 'pbkdf2:sha256:600000$...', '王强', 'EMPLOYEE', '留学顾问', NULL, '国际教育中心', '13798765432', 'wangqiang@yuejiao.edu', '440106199203203456', 'https://cdn.yuejiao.edu/avatar/teacher_wang.jpg', '中国', '正常', '2026-05-08 14:30:00', '192.168.1.102', '2026-04-23 14:30:00', '2026-05-08 14:30:00', 0, '负责英美留学项目咨询'),
+(4, 'stu2024001', 'pbkdf2:sha256:600000$...', '陈小明', 'STUDENT', NULL, 9, '计算机学院-软件工程2024级', '18620240001', 'chenxm@stu.yuejiao.edu', '440106200603154567', 'https://cdn.yuejiao.edu/avatar/stu2024001.jpg', '中国', '正常', '2026-05-10 14:30:00', '192.168.2.10', '2026-04-28 14:30:00', '2026-05-10 14:30:00', 0, '2024级新生，成绩优异'),
+(5, 'stu2024002', 'pbkdf2:sha256:600000$...', '林雨桐', 'STUDENT', NULL, 9, '外国语学院-英语2024级', '18620240002', 'linyt@stu.yuejiao.edu', '440106200511264568', 'https://cdn.yuejiao.edu/avatar/stu2024002.jpg', '中国', '正常', '2026-05-06 14:30:00', '192.168.2.11', '2026-05-03 14:30:00', '2026-05-06 14:30:00', 0, '有出国留学意向'),
+(6, 'stu2023001', 'pbkdf2:sha256:600000$...', '赵子轩', 'STUDENT', NULL, 9, '商学院-国际贸易2023级', '18620230001', 'zhaozx@stu.yuejiao.edu', '440106200409083456', 'https://cdn.yuejiao.edu/avatar/stu2023001.jpg', '中国', '正常', '2026-05-03 14:30:00', '192.168.2.12', '2026-03-14 14:30:00', '2026-05-03 14:30:00', 0, '大二学生，雅思备考中'),
+(7, 'sales_chen', 'pbkdf2:sha256:600000$...', '陈美玲', 'EMPLOYEE', '销售主管', NULL, '招生市场部', '13500135001', 'chenml@yuejiao.edu', '440106199510105678', 'https://cdn.yuejiao.edu/avatar/sales_chen.jpg', '中国', '正常', '2026-05-12 14:30:00', '192.168.1.103', '2026-04-25 14:30:00', '2026-05-12 14:30:00', 0, '负责华南地区招生'),
+(8, 'stu2024003', 'pbkdf2:sha256:600000$...', '周思琪', 'STUDENT', NULL, 9, '艺术学院-视觉传达2024级', '18620240003', 'zhousq@stu.yuejiao.edu', '440106200702154321', 'https://cdn.yuejiao.edu/avatar/stu2024003.jpg', '中国', '正常', '2026-05-09 14:30:00', '192.168.2.13', '2026-05-01 14:30:00', '2026-05-09 14:30:00', 0, '设计专业新生'),
+(9, 'teacher_zhao', 'pbkdf2:sha256:600000$...', '赵敏', 'EMPLOYEE', '班主任', NULL, '外国语学院', '13612345678', 'zhaomin@yuejiao.edu', '440106199008083456', 'https://cdn.yuejiao.edu/avatar/teacher_zhao.jpg', '中国', '正常', '2026-05-10 08:30:00', '192.168.1.104', '2026-04-20 10:00:00', '2026-05-10 08:30:00', 0, '负责外国语学院、计算机学院、商学院、艺术学院学生管理');
 
 
 

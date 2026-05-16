@@ -13,7 +13,7 @@ from schemas import (
 from crud import (
     UserCRUD, CrmCRUD, ReportCRUD, ScoreCRUD, EmployeeCRUD, DashboardCRUD
 )
-from utils.auth import get_current_user
+from utils.auth import require_employee_or_admin
 from model import SysUser
 
 router = APIRouter(prefix="/api/enterprise", tags=["企业智能助手"])
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/enterprise", tags=["企业智能助手"])
 # ==================== 意向客户管理 ====================
 
 @router.post("/lead")
-def create_lead(req: LeadCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+def create_lead(req: LeadCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """录入新意向客户"""
     lead = CrmCRUD.create(db, **req.model_dump(exclude_none=True))
     db.commit()
@@ -30,7 +30,7 @@ def create_lead(req: LeadCreateRequest, db: Session = Depends(get_db), current_u
 
 
 @router.get("/lead")
-def list_leads(status: str = "", db: Session = Depends(get_db)):
+def list_leads(status: str = "", db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """查询意向客户列表"""
     leads = CrmCRUD.get_all(db, status)
     return {"leads": [
@@ -48,7 +48,7 @@ def list_leads(status: str = "", db: Session = Depends(get_db)):
 
 
 @router.put("/lead/{lead_id}")
-def update_lead(lead_id: int, req: LeadUpdateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+def update_lead(lead_id: int, req: LeadUpdateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """更新意向客户信息"""
     lead = CrmCRUD.update(db, lead_id, **req.model_dump(exclude_none=True))
     if not lead:
@@ -60,7 +60,7 @@ def update_lead(lead_id: int, req: LeadUpdateRequest, db: Session = Depends(get_
 # ==================== 员工日报 ====================
 
 @router.post("/report")
-def submit_report(req: ReportCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+def submit_report(req: ReportCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """提交员工日报"""
     data = req.model_dump(exclude_none=True)
     if not data.get("report_date"):
@@ -72,7 +72,7 @@ def submit_report(req: ReportCreateRequest, db: Session = Depends(get_db), curre
 
 
 @router.get("/report")
-def list_reports(employee_id: int = 0, db: Session = Depends(get_db)):
+def list_reports(employee_id: int = 0, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """查询员工日报列表"""
     reports = ReportCRUD.get_all(db, employee_id)
     return {"reports": [
@@ -89,7 +89,7 @@ def list_reports(employee_id: int = 0, db: Session = Depends(get_db)):
 # ==================== 学生成绩管理 ====================
 
 @router.post("/score")
-def add_score(req: ScoreCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
+def add_score(req: ScoreCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """录入学生成绩"""
     score = ScoreCRUD.create(db, **req.model_dump(exclude_none=True))
     db.commit()
@@ -97,7 +97,7 @@ def add_score(req: ScoreCreateRequest, db: Session = Depends(get_db), current_us
 
 
 @router.get("/score")
-def list_scores(student_id: int, db: Session = Depends(get_db)):
+def list_scores(student_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """查询学生成绩"""
     scores = ScoreCRUD.get_by_student(db, student_id)
     return {"scores": [
@@ -114,7 +114,7 @@ def list_scores(student_id: int, db: Session = Depends(get_db)):
 # ==================== 员工查询 ====================
 
 @router.get("/employee")
-def list_employees(db: Session = Depends(get_db)):
+def list_employees(db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """查询员工列表"""
     employees = EmployeeCRUD.get_all(db)
     return {"employees": [
@@ -130,7 +130,7 @@ def list_employees(db: Session = Depends(get_db)):
 # ==================== 仪表盘 ====================
 
 @router.get("/dashboard")
-def dashboard(db: Session = Depends(get_db)):
+def dashboard(db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """企业助手仪表盘"""
     return DashboardCRUD.get_stats(db)
 
@@ -138,7 +138,7 @@ def dashboard(db: Session = Depends(get_db)):
 # ==================== 企业助手对话接口 ====================
 
 @router.post("/chat")
-def enterprise_chat(message: dict, db: Session = Depends(get_db)):
+def enterprise_chat(message: dict, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """企业助手对话接口（支持NL2SQL/日报/CRM等）"""
     from agents.enterprise.agent import EnterpriseAgent
     agent = EnterpriseAgent()
@@ -148,7 +148,7 @@ def enterprise_chat(message: dict, db: Session = Depends(get_db)):
 
 
 @router.post("/nl2sql")
-def nl2sql_query(message: dict, db: Session = Depends(get_db)):
+def nl2sql_query(message: dict, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """自然语言转SQL查询"""
     from agents.enterprise.agent import EnterpriseAgent
     agent = EnterpriseAgent()
@@ -158,7 +158,7 @@ def nl2sql_query(message: dict, db: Session = Depends(get_db)):
 
 
 @router.post("/voice-report")
-def voice_to_report(message: dict):
+def voice_to_report(message: dict, current_user: SysUser = Depends(require_employee_or_admin)):
     """口述文本 → 结构化日报"""
     from agents.enterprise.agent import EnterpriseAgent
     agent = EnterpriseAgent()
