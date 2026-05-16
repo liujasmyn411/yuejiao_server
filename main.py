@@ -55,7 +55,7 @@ templates = Jinja2Templates(directory="templates")
 # 前端入口 —— 所有页面路由走 index.html
 @app.get("/")
 async def serve_root(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 @app.get("/{full_path:path}")
@@ -63,7 +63,7 @@ async def serve_frontend(request: Request, full_path: str):
     # 只处理 HTML 页面请求，API / static 路径会被前面的路由拦截
     if full_path.startswith("api/") or full_path.startswith("static/") or full_path == "health" or full_path == "favicon.ico":
         raise HTTPException(status_code=404)
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request, "index.html")
 
 
 # ==================== 初始化测试数据 ====================
@@ -198,10 +198,11 @@ def init_sample_data():
                 db.add(l)
 
             # 示例日报
+            from datetime import date
             reports = [
-                EmployeeDailyReport(employee_id=2, report_date="2026-05-12",
+                EmployeeDailyReport(employee_id=2, report_date=date(2026, 5, 12),
                                     content="今天跟进3个客户。张三对新加坡项目意向强烈，已安排下周面试；李四还在考虑费用问题；王五决定不报，已标记流失。"),
-                EmployeeDailyReport(employee_id=2, report_date="2026-05-11",
+                EmployeeDailyReport(employee_id=2, report_date=date(2026, 5, 11),
                                     content="参加了新加坡项目培训会，更新了政策知识。新增2个意向客户，都来自线上咨询。"),
             ]
             for r in reports:
@@ -239,7 +240,7 @@ def init_sample_data():
                     stage="文书准备", stage_order=1, stage_status="已完成",
                     stage_detail="个人陈述初稿已完成，推荐信已联系2位教授",
                     handler_name="王强", handler_contact="wangqiang@yuejiao.edu",
-                    estimated_complete_date="2026-05-10", actual_complete_date="2026-05-08",
+                    estimated_complete_date=date(2026, 5, 10), actual_complete_date=date(2026, 5, 8),
                     is_current=0),
                 StudentStudyAbroadProgress(
                     student_id=7, target_country="英国", target_school="帝国理工学院",
@@ -247,7 +248,7 @@ def init_sample_data():
                     stage="文书审核", stage_order=2, stage_status="已完成",
                     stage_detail="文书老师已完成一审",
                     handler_name="王强", handler_contact="wangqiang@yuejiao.edu",
-                    estimated_complete_date="2026-05-15", actual_complete_date="2026-05-14",
+                    estimated_complete_date=date(2026, 5, 15), actual_complete_date=date(2026, 5, 14),
                     is_current=0),
                 StudentStudyAbroadProgress(
                     student_id=7, target_country="英国", target_school="帝国理工学院",
@@ -255,14 +256,14 @@ def init_sample_data():
                     stage="院校申请", stage_order=3, stage_status="进行中",
                     stage_detail="已提交在线申请表，材料完整待审核",
                     handler_name="王强", handler_contact="wangqiang@yuejiao.edu",
-                    estimated_complete_date="2026-05-30", is_current=1),
+                    estimated_complete_date=date(2026, 5, 30), is_current=1),
                 StudentStudyAbroadProgress(
                     student_id=8, target_country="新加坡", target_school="新加坡国立大学",
                     target_major="商科", degree_level="本科",
                     stage="文书准备", stage_order=1, stage_status="已完成",
                     stage_detail="个人陈述初稿完成，推荐信1封已到位",
                     handler_name="陈美玲", handler_contact="chenml@yuejiao.edu",
-                    estimated_complete_date="2026-05-20", actual_complete_date="2026-05-18",
+                    estimated_complete_date=date(2026, 5, 20), actual_complete_date=date(2026, 5, 18),
                     is_current=0),
                 StudentStudyAbroadProgress(
                     student_id=8, target_country="新加坡", target_school="新加坡国立大学",
@@ -270,7 +271,7 @@ def init_sample_data():
                     stage="文书审核", stage_order=2, stage_status="进行中",
                     stage_detail="文书老师已反馈初稿意见，需补充课外活动经历",
                     handler_name="陈美玲", handler_contact="chenml@yuejiao.edu",
-                    estimated_complete_date="2026-05-25", is_current=1),
+                    estimated_complete_date=date(2026, 5, 25), is_current=1),
             ]
             for p in progresses:
                 db.add(p)

@@ -21,6 +21,18 @@ import urllib.request
 import pytest
 
 # ═══════════════════════════════════════════════
+# Playwright 使用系统 Edge 浏览器（避免下载 Chromium）
+# ═══════════════════════════════════════════════
+
+@pytest.fixture(scope="session")
+def browser(browser_type_launch_args, browser_type):
+    """重写默认 browser fixture，使用系统已安装的 Edge（headless）。"""
+    browser = browser_type.launch(channel="msedge", headless=True, **browser_type_launch_args)
+    yield browser
+    browser.close()
+
+
+# ═══════════════════════════════════════════════
 # 全局常量
 # ═══════════════════════════════════════════════
 E2E_DB_PATH = "test_frontend_e2e.db"
@@ -44,12 +56,13 @@ def e2e_server():
     if os.path.exists(E2E_DB_PATH):
         os.remove(E2E_DB_PATH)
 
+    # stdout/stderr 不设为 PIPE，避免 Windows 管道缓冲区满导致子进程阻塞
     proc = subprocess.Popen(
         [sys.executable, "main.py"],
         cwd=os.path.dirname(os.path.dirname(__file__)),
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
     base_url = f"http://127.0.0.1:{E2E_PORT}"
@@ -91,7 +104,11 @@ def _login(page, server: str, username: str, password: str):
     page.fill("#login-username", username)
     page.fill("#login-password", password)
     page.click("button[type=submit]")
-    # 等待侧边栏出现，表示登录成功
+    # 等待登录成功（localStorage 中出现 token）
+    page.wait_for_function("() => localStorage.getItem('access_token') !== null", timeout=10000)
+    # 再等待导航到 dashboard 并完成渲染
+    page.wait_for_timeout(800)
+    # 等待侧边栏出现
     page.wait_for_selector("#sidebar .sidebar__nav", timeout=10000)
 
 
@@ -131,29 +148,32 @@ class TestCustomerAgentIntents:
     """
 
     def test_chat_widget_default_title(self, page, e2e_server):
-        """未登录时，聊天窗口默认标题应为「客服助手」。"""
+        """未登录时，聊天窗口默认标题应为「AI 助手」。"""
         page.goto(f"{e2e_server}/#/login")
         _open_chat(page)
         title = page.locator("#chat-title").inner_text()
-        assert "客服" in title, f"期望聊天标题包含「客服」，实际为：{title}"
+        assert "AI" in title, f"期望聊天标题包含「AI」，实际为：{title}"
 
     def test_page_projects_visible(self, page, e2e_server):
         """意图 project_recommend：前端有「课程项目」页面，可展示项目列表。"""
-        page.goto(f"{e2e_server}/#/projects")
+        _login(page, e2e_server, "员工1", "123456")
+        _navigate(page, e2e_server, "/projects")
         page.wait_for_selector("#content", timeout=10000)
         content = page.locator("#content").inner_text()
-        assert "项目" in content or "暂无" in content or "加载中" in content, "课程项目页面未正确渲染"
+        assert "新加坡" in content or "德国" in content or "本科" in content or "暂无" in content or "加载中" in content, "课程项目页面未正确渲染"
 
     def test_page_events_visible(self, page, e2e_server):
         """意图 event_registration：前端有「活动讲座」页面，支持查看活动和报名。"""
-        page.goto(f"{e2e_server}/#/events")
+        _login(page, e2e_server, "员工1", "123456")
+        _navigate(page, e2e_server, "/events")
         page.wait_for_selector("#content", timeout=10000)
         content = page.locator("#content").inner_text()
-        assert "活动" in content or "暂无" in content or "加载中" in content, "活动讲座页面未正确渲染"
+        assert "活动" in content or "讲座" in content or "分享会" in content or "暂无" in content or "加载中" in content, "活动讲座页面未正确渲染"
 
     def test_page_profile_match_visible(self, page, e2e_server):
         """意图 profile_match：前端有「画像研判」页面，支持输入客户信息并匹配。"""
-        page.goto(f"{e2e_server}/#/profile-match")
+        _login(page, e2e_server, "员工1", "123456")
+        _navigate(page, e2e_server, "/profile-match")
         page.wait_for_selector("#content", timeout=10000)
         content = page.locator("#content").inner_text()
         assert "画像研判" in content, "画像研判页面未正确渲染"

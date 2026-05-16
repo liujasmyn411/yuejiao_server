@@ -26,8 +26,15 @@ class EnterpriseAgent:
 
     def route_intent(self, user_input: str, db=None) -> dict:
         """识别意图并路由到对应处理器"""
+        # 短输入预检：≤3字且无明确业务关键词 → 直接闲聊
+        biz_keywords = ['客户', '查询', '日报', '审批', '仪表盘', '制度', '数据', '请假', '成绩',
+                        '录入', '更新', '修改', '统计', '报告', '架构', '部门', '员工', '项目']
+        stripped = user_input.strip()
+        if len(stripped) <= 3 and not any(kw in stripped for kw in biz_keywords):
+            return {"intent": "chitchat", "response": self._handle_chitchat(stripped, {}, db), "confidence": 0.95}
+
         result = self.llm.classify_intent(user_input, INTENT_DESCRIPTIONS)
-        intent = result.get("intent", "data_query")
+        intent = result.get("intent", "chitchat")
 
         handlers = {
             "lead_create": self._handle_lead_create,
@@ -42,7 +49,7 @@ class EnterpriseAgent:
             "chitchat": self._handle_chitchat,
         }
 
-        handler = handlers.get(intent, self._handle_data_query)
+        handler = handlers.get(intent, self._handle_chitchat)
         response = handler(user_input, result.get("entities", {}), db)
         return {"intent": intent, "response": response, "confidence": result.get("confidence", 0.5)}
 
@@ -230,7 +237,59 @@ class EnterpriseAgent:
     def _handle_chitchat(self, user_input: str, entities: dict, db) -> str:
         """日常闲聊"""
         prompt = "你是粤教服务的企业助手，用轻松专业的语气和同事聊天。回复控制在2-3句话。"
-        return self.llm.chat(prompt, user_input)
+        try:
+            result = self.llm.chat(prompt, user_input)
+            if result.startswith("[LLM"):
+                return self._local_chitchat(user_input)
+            return result
+        except Exception:
+            return self._local_chitchat(user_input)
+
+    def _local_chitchat(self, user_input: str) -> str:
+        """本地闲聊 fallback（LLM不可用时）"""
+        # 精确匹配问候语
+        greetings = {
+            '你好': '你好！我是粤教服务的企业助手，有什么可以帮你的吗？',
+            'hi': 'Hi！有什么需要帮忙的吗？',
+            '嗨': '嗨！有什么可以帮你的？',
+            '早上好': '早上好！新的一天开始了，有什么需要协助的？',
+            '晚上好': '晚上好！还在加班吗？辛苦了~',
+            '谢谢': '不客气！随时为你效劳~',
+            '再见': '再见！祝你工作顺利！',
+            '你是谁': '我是粤教服务的企业智能助手，可以帮你管理CRM客户、整理日报、查询数据、处理审批等。有什么需要尽管问我！',
+            '你叫什么': '我叫"小粤企"，是粤教服务的企业智能助手，很高兴认识你！',
+            '你能做什么': '我可以帮你：\n• 录入/查询/更新意向客户\n• 整理口述日报\n• 自然语言查询数据库\n• 查看仪表盘数据\n• 新人入职指引\n• 审批辅助\n有什么想试试的吗？',
+            '在吗': '在的！有什么可以帮你的？',
+        }
+        for kw, reply in greetings.items():
+            if kw in user_input:
+                return reply
+
+        # 话题匹配
+        topics = {
+            '天气': '天气这个话题确实让人关心~ 不过我更擅长帮你处理工作事务，比如CRM管理、日报整理、数据查询等。有工作上的需要吗？',
+            '吃饭': '说到吃饭，工作再忙也要按时吃饭哦！需要我帮你快速处理一些工作事务吗？',
+            '周末': '周末是放松的好时光！需要我在你休息前帮你整理一下本周的工作数据吗？',
+            '旅游': '旅游是个让人开心的话题！不过在工作时间里，有什么CRM客户或数据查询需要我帮忙的吗？',
+            '电影': '看来你心情不错~ 工作之余放松一下挺好。有什么工作上的事情需要我协助吗？',
+            '音乐': '好品味！音乐能提升工作效率。需要我帮你处理一些日常工作事务吗？',
+            '游戏': '游戏是很好的放松方式~ 不过别忘了工作哦！需要我帮你快速完成一些任务吗？',
+            '运动': '保持运动习惯很棒！精力充沛才能高效工作。有什么需要我帮忙的吗？',
+            '股票': '投资理财是门学问~ 不过我的专长在企业办公协助上，有CRM或数据方面的问题可以问我。',
+            '新闻': '世界变化很快~ 不过我更关注你的工作需求。需要我帮你查询什么数据吗？',
+            '无聊': '哈哈，无聊的时候可以试试我的功能：查客户、写日报、看仪表盘，说不定会发现有趣的数据！',
+            '笑话': '我这里没有笑话库，但我可以帮你查询数据库，看看有没有有趣的客户记录？',
+            '故事': '我更擅长讲故事——用数据讲故事！想看看仪表盘数据或者客户分析吗？',
+        }
+        for kw, reply in topics.items():
+            if kw in user_input:
+                return reply
+
+        # 问句 → 引导到功能
+        if user_input.endswith('?') or user_input.endswith('？') or user_input.endswith('吗'):
+            return f"关于「{user_input}」，我主要擅长企业办公协助。你可以试试：\n• 查询所有意向客户\n• 查看仪表盘\n• 帮我写日报\n需要哪方面的帮助？"
+
+        return f"闲聊时间~ 不过说到正事，我可以帮你管理CRM客户、整理日报、查询数据。有什么工作上的需要吗？"
 
     # ==================== 便捷入口 ====================
 

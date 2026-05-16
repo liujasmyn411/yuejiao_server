@@ -36,6 +36,7 @@ class LLMClient:
                     "max_tokens": max_tokens or self.max_tokens,
                 },
                 timeout=30,
+                proxies={"http": None, "https": None},
             )
             resp.raise_for_status()
             data = resp.json()

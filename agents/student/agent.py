@@ -285,7 +285,27 @@ class StudentAgent:
                          student_id: int, db) -> str:
         """日常闲聊（附带轻量心理评估）"""
         prompt = "你是粤教服务的学生助手小粤，用温暖轻松的语气和学生聊天。回复2-3句话，可以适当鼓励。"
-        return self.llm.chat(prompt, user_input)
+        try:
+            result = self.llm.chat(prompt, user_input)
+            if result.startswith("[LLM"):
+                return self._local_chitchat(user_input)
+            return result
+        except Exception:
+            return self._local_chitchat(user_input)
+
+    def _local_chitchat(self, user_input: str) -> str:
+        greetings = {
+            '你好': '你好呀！我是小粤，有什么可以帮你的吗？学习、生活、留学方面的问题都可以问我~',
+            'hi': 'Hi！有什么需要帮忙的吗？',
+            '嗨': '嗨！最近怎么样？有什么想问我的吗？',
+            '早上好': '早上好！新的一天，一起加油！',
+            '谢谢': '不客气！希望你一切顺利~',
+            '再见': '再见！照顾好自己哦~',
+        }
+        for kw, reply in greetings.items():
+            if kw in user_input:
+                return reply
+        return f"嗯嗯，关于「{user_input}」，你想聊什么呢？我随时在这陪你~"
 
     # ==================== 辅助方法 ====================
 

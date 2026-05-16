@@ -149,6 +149,8 @@ activemq-data/
 
 # Project specific
 log/
+*.db
+!yuejiao.db
 
 # Environments
 .env

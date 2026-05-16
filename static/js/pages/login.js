@@ -49,9 +49,8 @@ const LoginPage = (() => {
         localStorage.setItem('access_token', data.access_token);
         localStorage.setItem('user', JSON.stringify(data.user));
 
-        // 根据角色设置 Agent 类型
-        const agentMap = { STUDENT: 'student', EMPLOYEE: 'enterprise', ADMIN: 'enterprise' };
-        ChatWidget.setAgent(agentMap[data.user.user_type] || 'customer', data.user.id);
+        // 统一 AI 聊天窗口
+        ChatWidget.setAgent('unified', data.user.id);
 
         Sidebar.render();
         Topbar.render('/dashboard');

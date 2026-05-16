@@ -73,25 +73,31 @@ const Nl2sqlPage = (() => {
       }
 
       // 显示查询结果表格
-      if (data.results && Array.isArray(data.results) && data.results.length) {
-        const columns = Object.keys(data.results[0]);
+      const rows = data.data || data.results;
+      if (rows && Array.isArray(rows) && rows.length) {
+        resultHtml += `<p class="text-muted mb-8">共 ${data.count || rows.length} 条记录</p>`;
+        const columns = Object.keys(rows[0]);
         resultHtml += `
           <div class="table-container">
             <table class="table">
               <thead><tr>${columns.map(c => `<th>${esc(c)}</th>`).join('')}</tr></thead>
               <tbody>
-                ${data.results.map(row => `
+                ${rows.map(row => `
                   <tr>${columns.map(c => `<td>${esc(String(row[c] ?? '-'))}</td>`).join('')}</tr>
                 `).join('')}
               </tbody>
             </table>
           </div>
         `;
-      } else if (data.results && Array.isArray(data.results) && !data.results.length) {
+      } else if (rows && Array.isArray(rows) && !rows.length) {
         resultHtml += '<div class="page-placeholder"><div class="placeholder-icon">📭</div><h3>查询无结果</h3></div>';
       }
 
-      // 显示更新成功
+      // 显示更新/操作结果
+      if (data.type === 'UPDATE' && data.data && data.data.length) {
+        const upd = data.data[0];
+        resultHtml += `<div class="mt-16"><span class="tag tag-green">操作成功</span> ${esc(upd.message || '更新完成')}（影响行数: ${upd.affected_rows || 0}）</div>`;
+      }
       if (data.success) {
         resultHtml += `<div class="mt-16"><span class="tag tag-green">操作成功</span> ${esc(data.message || '')}</div>`;
       }

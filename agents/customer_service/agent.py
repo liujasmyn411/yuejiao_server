@@ -142,7 +142,27 @@ class CustomerServiceAgent:
 
     def _handle_chitchat(self, user_input: str, entities: dict) -> str:
         """日常闲聊"""
-        return self.llm.chat(CHITCHAT_PROMPT, user_input)
+        try:
+            result = self.llm.chat(CHITCHAT_PROMPT, user_input)
+            if result.startswith("[LLM"):
+                return self._local_chitchat(user_input)
+            return result
+        except Exception:
+            return self._local_chitchat(user_input)
+
+    def _local_chitchat(self, user_input: str) -> str:
+        greetings = {
+            '你好': '您好！我是粤教服务的客服助手，很高兴为您服务。有什么关于留学、课程的问题都可以问我~',
+            'hi': 'Hi！欢迎来到粤教服务，有什么可以帮您的吗？',
+            '嗨': '嗨！有什么留学相关问题想了解的吗？',
+            '早上好': '早上好！欢迎咨询粤教服务~',
+            '谢谢': '不客气！如有其他问题随时找我~',
+            '再见': '再见！祝您生活愉快！',
+        }
+        for kw, reply in greetings.items():
+            if kw in user_input:
+                return reply
+        return f"收到您的消息~ 关于「{user_input}」，有什么具体想了解的吗？我们的留学项目、课程服务和活动讲座都可以咨询哦~"
 
     # ==================== 便捷入口 ====================
 

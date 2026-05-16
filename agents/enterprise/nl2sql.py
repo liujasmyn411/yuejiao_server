@@ -28,10 +28,15 @@ class NL2SQL:
     }
 
     # 危险SQL关键字（UPDATE已从黑名单移除，走白名单控制）
-    DANGEROUS_KEYWORDS = [
+    # 单字关键词 — 用词边界匹配，避免误杀列名（如 DELETE 误匹配 delete_flag）
+    DANGEROUS_WORDS = [
         "INSERT", "DELETE", "DROP", "ALTER",
         "TRUNCATE", "CREATE", "REPLACE", "GRANT", "REVOKE",
-        "EXEC", "EXECUTE", "INTO OUTFILE", "INTO DUMPFILE",
+        "EXEC", "EXECUTE",
+    ]
+    # 多词/函数模式 — 子串匹配（不太可能出现在正常标识符中）
+    DANGEROUS_PATTERNS = [
+        "INTO OUTFILE", "INTO DUMPFILE",
         "LOAD_FILE", "SLEEP(", "BENCHMARK(", "WAITFOR",
     ]
 
@@ -82,9 +87,15 @@ class NL2SQL:
         """验证SELECT语句安全性"""
         upper = sql.upper()
 
-        for kw in self.DANGEROUS_KEYWORDS:
-            if kw.upper() in upper:
-                return False, f"SQL包含不允许的操作: {kw}"
+        # 单字关键词用词边界匹配（避免 DELETE 误匹配 delete_flag 等列名）
+        for word in self.DANGEROUS_WORDS:
+            if re.search(r'\b' + re.escape(word) + r'\b', upper):
+                return False, f"SQL包含不允许的操作: {word}"
+
+        # 多词/函数模式用子串匹配
+        for pat in self.DANGEROUS_PATTERNS:
+            if pat.upper() in upper:
+                return False, f"SQL包含不允许的操作: {pat}"
 
         table_pattern = re.compile(r'\bFROM\s+(\w+)|JOIN\s+(\w+)', re.IGNORECASE)
         tables = set()

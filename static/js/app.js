@@ -35,8 +35,7 @@ const App = (() => {
       Sidebar.render();
       Topbar.render(initialPath);
       Topbar.updateUnread();
-      const agentMap = { STUDENT: 'student', EMPLOYEE: 'enterprise', ADMIN: 'enterprise' };
-      ChatWidget.setAgent(agentMap[user.user_type] || 'customer', user.id);
+      ChatWidget.setAgent('unified', user.id);
     }
 
     Router.init();

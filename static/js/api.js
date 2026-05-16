@@ -47,6 +47,7 @@ const API = (() => {
   }
 
   return {
+    getToken,
     get(url) { return request(url); },
     post(url, body, isJson = true) { return request(url, { method: 'POST', body, isJson }); },
     put(url, body) { return request(url, { method: 'PUT', body }); },

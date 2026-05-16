@@ -78,12 +78,19 @@ const ParseFilePage = (() => {
   function renderProfileFields(profile) {
     const fields = [
       ['姓名', profile.name || profile.Name || profile.姓名],
+      ['性别', profile.gender || profile.Gender || profile.性别],
       ['年龄', profile.age || profile.Age || profile.年龄],
       ['学历', profile.education || profile.Education || profile.学历],
       ['电话', profile.phone || profile.Phone || profile.电话 || profile.contact],
       ['邮箱', profile.email || profile.Email || profile.邮箱],
+      ['微信', profile.wechat || profile.Wechat || profile.微信],
       ['意向国家', profile.intended_country || profile.country || profile.意向国家],
       ['意向专业', profile.intended_major || profile.major || profile.意向专业],
+      ['语言水平', profile.language_level || profile.语言水平],
+      ['家庭经济', profile.family_finance || profile.家庭经济],
+      ['学校', profile.school || profile.School || profile.学校],
+      ['地址', profile.address || profile.Address || profile.地址],
+      ['备注', profile.remark || profile.Remark || profile.备注],
     ];
     return fields.filter(([_, v]) => v).map(([label, value]) => `
       <div class="parse-field">

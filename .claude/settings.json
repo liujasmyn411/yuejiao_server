@@ -16,7 +16,31 @@
       "Bash(node -c static/js/pages/studentInfo.js)",
       "Bash(node -c static/js/pages/nl2sql.js)",
       "Bash(node -c static/js/api.js)",
-      "Bash(node -c static/js/router.js)"
+      "Bash(node -c static/js/router.js)",
+      "Bash(node -c static/js/components/chat.js)",
+      "Bash(node -c static/js/app.js)",
+      "Bash(node -c static/js/pages/login.js)",
+      "Bash(python -m py_compile agents/enterprise/agent.py)",
+      "Bash(python -m py_compile agents/enterprise/prompts.py)",
+      "Bash(python -m py_compile agents/student/agent.py)",
+      "Bash(python -m py_compile agents/customer_service/agent.py)",
+      "Bash(python -m py_compile api/chat_routes.py)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" --connect-timeout 5 https://dashscope.aliyuncs.com/compatible-mode/v1/models -H \"Authorization: Bearer sk-c8415add47ad4e7b9422a9cd8bdd99cd\")",
+      "Bash(python -m py_compile utils/llm_client.py)",
+      "Bash(python -m py_compile agents/enterprise/nl2sql.py)",
+      "Bash(where python *)",
+      "Bash(pip show *)",
+      "Bash(ls -la .venv/Scripts/python.exe)",
+      "Bash(.venv/Scripts/python.exe --version)",
+      "Bash(.venv/Scripts/python -c ' *)",
+      "Bash(node -e \"const esc = s => s.replace\\(/&/g,'&amp;'\\).replace\\(/</g,'&lt;'\\); const md = t => { let h = esc\\(t\\); h = h.replace\\(/\\\\*\\\\*\\(.+?\\)\\\\*\\\\*/g, '<strong>\\\\$1</strong>'\\); h = h.replace\\(/\\\\n/g, '<br>'\\); return '<p>'+h+'</p>'; }; console.log\\(md\\('**hello** world\\\\nline2'\\)\\);\")",
+      "Bash(node -c static/js/pages/parseFile.js)",
+      "Bash(python -m py_compile utils/file_parser.py)",
+      "Bash(node -c static/js/pages/orgChart.js)",
+      "Bash(git rm *)",
+      "Bash(rm -f test_*.db test*.db)",
+      "Bash(ls *.db)",
+      "Bash(taskkill -f -im python.exe)"
     ]
   }
 }
