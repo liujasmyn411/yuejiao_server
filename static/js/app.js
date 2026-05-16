@@ -3,46 +3,26 @@
  */
 const App = (() => {
   function init() {
-    // 初始化聊天浮窗
     ChatWidget.init();
 
-    // 注册所有路由
-    // 登录（无需认证）
-    Router.register('/login', LoginPage.render, {
-      requireAuth: false,
-      onMount: LoginPage.onMount,
-    });
+    Router.register('/login', LoginPage.render, { requireAuth: false, onMount: LoginPage.onMount });
+    Router.register('/dashboard', DashboardPage.render, { requireAuth: true, onMount: DashboardPage.onMount });
+    Router.register('/leads', LeadsPage.render, { requireAuth: true, onMount: LeadsPage.onMount });
+    Router.register('/academic', AcademicPage.render, { requireAuth: true, onMount: AcademicPage.onMount });
+    Router.register('/events', EventsPage.render, { requireAuth: true, onMount: EventsPage.onMount });
+    Router.register('/projects', ProjectsPage.render, { requireAuth: true, onMount: ProjectsPage.onMount });
+    Router.register('/profile-match', ProfileMatchPage.render, { requireAuth: true, onMount: ProfileMatchPage.onMount });
+    Router.register('/parse-file', ParseFilePage.render, { requireAuth: true, onMount: ParseFilePage.onMount });
+    Router.register('/reports', ReportsPage.render, { requireAuth: true, onMount: ReportsPage.onMount });
+    Router.register('/scores', ScoresPage.render, { requireAuth: true, onMount: ScoresPage.onMount });
+    Router.register('/employees', EmployeesPage.render, { requireAuth: true, onMount: EmployeesPage.onMount });
+    Router.register('/approvals', ApprovalsPage.render, { requireAuth: true, onMount: ApprovalsPage.onMount });
+    Router.register('/org-chart', OrgChartPage.render, { requireAuth: true, onMount: OrgChartPage.onMount });
+    Router.register('/study-abroad', StudyAbroadPage.render, { requireAuth: true, onMount: StudyAbroadPage.onMount });
+    Router.register('/leave', LeavePage.render, { requireAuth: true, onMount: LeavePage.onMount });
+    Router.register('/feedback', FeedbackPage.render, { requireAuth: true, onMount: FeedbackPage.onMount });
+    Router.register('/notifications', NotificationsPage.render, { requireAuth: true, onMount: NotificationsPage.onMount });
 
-    // 仪表盘
-    Router.register('/dashboard', DashboardPage.render, {
-      requireAuth: true,
-      onMount: DashboardPage.onMount,
-    });
-
-    // 占位页面（后续逐一实现）
-    const pages = [
-      '/events', '/projects', '/profile-match', '/parse-file',
-      '/leads', '/reports', '/scores', '/employees', '/approvals', '/org-chart',
-      '/academic', '/study-abroad', '/leave', '/feedback', '/notifications',
-    ];
-    pages.forEach(path => {
-      Router.register(path, () => {
-        const titles = {
-          '/events': '活动讲座', '/projects': '课程项目', '/profile-match': '画像研判',
-          '/parse-file': '文件解析', '/leads': 'CRM客户管理', '/reports': '员工日报',
-          '/scores': '成绩管理', '/employees': '员工通讯录', '/approvals': '审批管理',
-          '/org-chart': '组织架构', '/academic': '教务DDL', '/study-abroad': '留学进度',
-          '/leave': '请假申请', '/feedback': '反馈工单', '/notifications': '通知中心',
-        };
-        return `<div class="page-placeholder">
-          <div class="placeholder-icon">🚧</div>
-          <h3>${titles[path]}</h3>
-          <p>此页面即将实现...</p>
-        </div>`;
-      }, { requireAuth: true });
-    });
-
-    // 检查登录态，渲染初始页面
     const token = localStorage.getItem('access_token');
     if (token) {
       const user = JSON.parse(localStorage.getItem('user') || '{}');

@@ -8,18 +8,11 @@
 </head>
 <body>
   <div id="app">
-    <!-- 侧边栏 -->
     <aside id="sidebar" class="sidebar"></aside>
-
-    <!-- 主区域 -->
     <div class="main-area">
-      <!-- 顶栏 -->
       <header id="topbar" class="topbar"></header>
-      <!-- 内容区 -->
       <main id="content" class="content"></main>
     </div>
-
-    <!-- 聊天浮窗 -->
     <div id="chat-widget" class="chat-widget hidden">
       <div class="chat-widget__header">
         <span id="chat-title">AI 助手</span>
@@ -36,20 +29,36 @@
     </div>
     <button id="chat-toggle" class="chat-toggle btn btn-primary">💬 AI助手</button>
   </div>
-
-  <!-- Toast 容器 -->
   <div id="toast-container" class="toast-container"></div>
 
-  <!-- JS 模块 -->
+  <!-- JS: 核心 -->
   <script src="/static/js/api.js"></script>
   <script src="/static/js/router.js"></script>
+  <!-- JS: 组件 -->
   <script src="/static/js/components/sidebar.js"></script>
   <script src="/static/js/components/topbar.js"></script>
   <script src="/static/js/components/toast.js"></script>
   <script src="/static/js/components/modal.js"></script>
   <script src="/static/js/components/chat.js"></script>
+  <!-- JS: 页面 -->
   <script src="/static/js/pages/login.js"></script>
   <script src="/static/js/pages/dashboard.js"></script>
+  <script src="/static/js/pages/leads.js"></script>
+  <script src="/static/js/pages/academic.js"></script>
+  <script src="/static/js/pages/events.js"></script>
+  <script src="/static/js/pages/projects.js"></script>
+  <script src="/static/js/pages/profileMatch.js"></script>
+  <script src="/static/js/pages/parseFile.js"></script>
+  <script src="/static/js/pages/reports.js"></script>
+  <script src="/static/js/pages/scores.js"></script>
+  <script src="/static/js/pages/employees.js"></script>
+  <script src="/static/js/pages/approvals.js"></script>
+  <script src="/static/js/pages/orgChart.js"></script>
+  <script src="/static/js/pages/studyAbroad.js"></script>
+  <script src="/static/js/pages/leave.js"></script>
+  <script src="/static/js/pages/feedback.js"></script>
+  <script src="/static/js/pages/notifications.js"></script>
+  <!-- JS: 入口 -->
   <script src="/static/js/app.js"></script>
 </body>
 </html>

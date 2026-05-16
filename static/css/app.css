@@ -398,6 +398,130 @@ input, textarea, select { font: inherit; }
 .gap-8 { gap: 8px; }
 .gap-12 { gap: 12px; }
 
+/* ---- 页面头部 ---- */
+.page-header { padding-bottom: 16px; }
+
+/* ---- 筛选标签 ---- */
+.filter-tabs { display: flex; gap: 4px; }
+.filter-tab {
+  padding: 6px 14px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--color-border); background: var(--color-surface);
+  color: var(--color-text-secondary); transition: all var(--transition);
+}
+.filter-tab:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.filter-tab--active { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
+
+/* ---- 双列表单 ---- */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+
+/* ---- DDL 行高亮 ---- */
+.row-done { opacity: .5; }
+.row-urgent { background: #fef2f2 !important; }
+.row-urgent:hover td { background: #fee2e2 !important; }
+.row-warn { background: #fffbeb !important; }
+.row-warn:hover td { background: #fef3c7 !important; }
+
+/* ---- 活动卡片 ---- */
+#events-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.event-card__header { display: flex; gap: 8px; margin-bottom: 12px; }
+.event-card__title { font-size: 15px; margin-bottom: 12px; }
+.event-card__info { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.event-info-item { display: flex; gap: 8px; font-size: 13px; }
+.event-info-label { color: var(--color-text-muted); min-width: 48px; flex-shrink: 0; }
+.progress-bar { height: 6px; background: var(--color-border); border-radius: 3px; overflow: hidden; }
+.progress-bar__fill { height: 100%; background: var(--color-primary); border-radius: 3px; transition: width .3s; }
+
+/* ---- 报名弹窗 ---- */
+.event-register-info p { margin-bottom: 4px; font-size: 13px; }
+
+/* ---- 项目卡片 ---- */
+#projects-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+.project-card__header { display: flex; gap: 8px; margin-bottom: 10px; }
+.project-card__title { font-size: 15px; margin-bottom: 8px; }
+.project-card__desc { font-size: 13px; color: var(--color-text-secondary); margin-bottom: 10px; line-height: 1.6; }
+.project-card__meta { font-size: 12px; margin-bottom: 8px; }
+.project-card__meta div { margin-bottom: 2px; }
+.project-card__audience { font-size: 12px; color: var(--color-text-secondary); background: var(--color-bg); padding: 6px 10px; border-radius: 4px; }
+.project-card__require { font-size: 12px; }
+
+/* ---- 画像研判 ---- */
+.match-list { display: flex; flex-direction: column; gap: 12px; }
+.match-card { position: relative; }
+.match-rank {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--color-primary); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+}
+.match-score {
+  font-size: 20px; font-weight: 700; color: var(--color-primary);
+  white-space: nowrap;
+}
+.match-reasons { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ---- 文件解析 ---- */
+.upload-zone {
+  border: 2px dashed var(--color-border); border-radius: var(--radius);
+  padding: 48px 24px; text-align: center; cursor: pointer;
+  transition: all var(--transition);
+}
+.upload-zone:hover, .upload-zone--active { border-color: var(--color-primary); background: var(--color-primary-light); }
+.upload-zone__icon { font-size: 40px; margin-bottom: 12px; }
+.upload-zone p { font-size: 14px; color: var(--color-text-secondary); margin-bottom: 6px; }
+.parse-profile { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.parse-field { padding: 8px 12px; background: var(--color-bg); border-radius: 4px; }
+.parse-field__label { font-size: 11px; color: var(--color-text-muted); display: block; margin-bottom: 2px; }
+.parse-field__value { font-size: 13px; font-weight: 500; }
+.parse-text { font-size: 12px; white-space: pre-wrap; background: var(--color-bg); padding: 12px; border-radius: 4px; max-height: 300px; overflow-y: auto; }
+
+/* ---- 时间线（留学进度） ---- */
+.timeline { padding-left: 20px; }
+.timeline-item { display: flex; gap: 16px; padding-bottom: 24px; position: relative; }
+.timeline-item__marker { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
+.timeline-dot {
+  width: 30px; height: 30px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+  background: var(--color-border); color: var(--color-text-muted);
+}
+.timeline-item--active .timeline-dot { background: var(--color-primary); color: #fff; }
+.timeline-item--done .timeline-dot { background: var(--color-success); color: #fff; }
+.timeline-line {
+  width: 2px; flex: 1; min-height: 30px;
+  background: var(--color-border);
+}
+.timeline-item--done .timeline-line { background: var(--color-success); }
+.timeline-item__body { flex: 1; padding-bottom: 8px; }
+.timeline-item__meta { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--color-text-muted); }
+
+/* ---- 通知卡片 ---- */
+.notif-card { position: relative; }
+.notif-card--unread { border-left: 3px solid var(--color-primary); }
+.notif-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--color-primary); flex-shrink: 0;
+}
+
+/* ---- 组织架构树 ---- */
+.tree ul { padding-left: 24px; }
+.tree li { list-style: none; }
+.tree-node {
+  padding: 8px 12px; border-radius: 6px; margin: 4px 0;
+  border: 1px solid var(--color-border); background: var(--color-surface);
+}
+.tree-node:hover { border-color: var(--color-primary); }
+.tree-node__name { font-weight: 600; font-size: 14px; }
+.tree-node__desc { font-size: 12px; color: var(--color-text-secondary); margin-top: 2px; }
+.tree-node__contact { font-size: 11px; color: var(--color-text-muted); margin-top: 4px; display: flex; gap: 12px; }
+
+/* ==================== 响应式 ==================== */
+
 /* ==================== 响应式 ==================== */
 @media (max-width: 768px) {
   .sidebar { width: 60px; }

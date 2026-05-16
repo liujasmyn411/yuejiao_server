@@ -14,7 +14,7 @@ Base = declarative_base()
 # ========== 表1：统一用户表 ==========
 class SysUser(Base):
     __tablename__ = "sys_user"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     username = Column(String(50), nullable=False, unique=True, comment='登录账号')
     password_hash = Column(String(255), nullable=False, comment='加密密码')
     real_name = Column(String(30), nullable=False, comment='真实姓名')
@@ -39,7 +39,7 @@ class SysUser(Base):
 # ========== 表2：学生行政服务表 ==========
 class StudentAdminService(Base):
     __tablename__ = "student_admin_service"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     student_id = Column(BigInteger, nullable=False, comment='学生ID')
     service_type = Column(String(30), nullable=False, comment='请假/考务')
     leave_type = Column(String(30), comment='病假/事假')
@@ -60,7 +60,7 @@ class StudentAdminService(Base):
 # ========== 表3：心理健康画像表 ==========
 class StudentPsychProfile(Base):
     __tablename__ = "student_psych_profile"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     student_id = Column(BigInteger, nullable=False, unique=True, comment='学生ID')
     latest_emotion_tag = Column(String(100), comment='最新情绪标签')
     emotion_score = Column(Integer, comment='情绪分数 0-100')
@@ -77,7 +77,7 @@ class StudentPsychProfile(Base):
 # ========== 表4：心理预警记录表 ==========
 class StudentPsychAlert(Base):
     __tablename__ = "student_psych_alert"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     student_id = Column(BigInteger, nullable=False, comment='学生ID')
     trigger_reason = Column(Text, nullable=False, comment='触发原因')
     risk_level = Column(String(20), nullable=False, comment='high/medium/low/none')
@@ -94,7 +94,7 @@ class StudentPsychAlert(Base):
 # ========== 表5：学生反馈工单表 ==========
 class StudentFeedbackTicket(Base):
     __tablename__ = "student_feedback_ticket"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     student_id = Column(BigInteger, nullable=False, comment='学生ID')
     feedback_type = Column(String(30), comment='投诉/建议/咨询')
     content = Column(String(255), nullable=False, comment='反馈摘要')
@@ -114,7 +114,7 @@ class StudentFeedbackTicket(Base):
 # ========== 表6：意向客户表 ==========
 class CrmLead(Base):
     __tablename__ = "crm_lead"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     customer_name = Column(String(30), nullable=False, comment='客户姓名')
     contact_info = Column(String(20), comment='电话/微信')
     age = Column(Integer, comment='年龄')
@@ -139,7 +139,7 @@ class CrmLead(Base):
 # ========== 表7：员工日报表 ==========
 class EmployeeDailyReport(Base):
     __tablename__ = "employee_daily_report"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     employee_id = Column(BigInteger, nullable=False, comment='员工ID')
     report_date = Column(Date, nullable=False, comment='日报日期')
     work_type = Column(String(50), comment='工作类型')
@@ -154,7 +154,7 @@ class EmployeeDailyReport(Base):
 # ========== 表8：学生成绩表 ==========
 class StudentScore(Base):
     __tablename__ = "student_score"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     student_id = Column(BigInteger, nullable=False, comment='学生ID')
     course_name = Column(String(100), nullable=False, comment='课程名称')
     score = Column(Numeric(5, 2), nullable=False, comment='得分')
@@ -172,7 +172,7 @@ class StudentScore(Base):
 # ========== 表9：课程项目表 ==========
 class CourseProject(Base):
     __tablename__ = "course_project"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     project_name = Column(String(100), nullable=False, comment='项目名称')
     category = Column(String(50), comment='项目类别')
     country = Column(String(50), comment='所属国家')
@@ -192,7 +192,7 @@ class CourseProject(Base):
 # ========== 表10：活动讲座表 ==========
 class EventLecture(Base):
     __tablename__ = "event_lecture"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     event_name = Column(String(100), nullable=False, comment='活动名称')
     event_type = Column(String(20), comment='线上/线下')
     speaker = Column(String(50), comment='主讲人')
@@ -212,7 +212,7 @@ class EventLecture(Base):
 # ========== 表11：活动报名表 ==========
 class EventRegistration(Base):
     __tablename__ = "event_registration"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     event_id = Column(BigInteger, ForeignKey("event_lecture.id"), nullable=False, comment='活动ID')
     customer_id = Column(BigInteger, nullable=False, comment='客户ID')
     customer_name = Column(String(30), comment='客户姓名')
@@ -228,7 +228,7 @@ class EventRegistration(Base):
 # ========== 表12：学生教务信息表 ==========
 class StudentAcademic(Base):
     __tablename__ = "student_academic"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     student_id = Column(BigInteger, nullable=False, comment='学生ID')
     course_name = Column(String(100), nullable=False, comment='课程名称')
     academic_type = Column(String(30), nullable=False, comment='类型：考试/论文/作业/项目')
@@ -251,7 +251,7 @@ class StudentAcademic(Base):
 # ========== 表13：留学业务进度追踪表 ==========
 class StudentStudyAbroadProgress(Base):
     __tablename__ = "student_study_abroad_progress"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     student_id = Column(BigInteger, nullable=False, comment='学生ID')
     target_country = Column(String(50), nullable=False, comment='目标国家')
     target_school = Column(String(200), nullable=False, comment='目标院校')
@@ -275,7 +275,7 @@ class StudentStudyAbroadProgress(Base):
 # ========== 表14：站内通知表 ==========
 class Notification(Base):
     __tablename__ = "notification"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     recipient_id = Column(BigInteger, nullable=False, comment='接收人ID')
     title = Column(String(100), nullable=False, comment='通知标题')
     content = Column(Text, comment='通知内容')
@@ -290,7 +290,7 @@ class Notification(Base):
 # ========== 表15：组织架构表 ==========
 class OrgDepartment(Base):
     __tablename__ = "org_department"
-    id = Column(BigInteger, primary_key=True, autoincrement=True, comment='主键ID')
+    id = Column(Integer, primary_key=True, autoincrement=True, comment='主键ID')
     dept_name = Column(String(100), nullable=False, comment='部门名称')
     parent_id = Column(BigInteger, default=0, comment='上级部门ID，0=顶级')
     dept_level = Column(SmallInteger, default=1, comment='层级 1=公司 2=部门 3=小组')
