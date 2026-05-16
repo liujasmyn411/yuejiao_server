@@ -1,6 +1,6 @@
 """
 学生智能助手路由测试
-覆盖：学生信息 / 请假 / 投诉反馈 / 心理预警 / 教务 / 留学进度 / 对话
+覆盖：学生信息 / 请假 / 投诉反馈 / 心理预警 / 教务 / 留学进度 / 通知 / 对话
 """
 
 import pytest
@@ -12,36 +12,40 @@ from faker import Faker
 fake = Faker("zh_CN")
 
 # ══════════════════════════════════════════════════════════════════════
-# GET /api/student/info  (公开接口，无需认证)
+# GET /api/student/info  (需认证)
 # ══════════════════════════════════════════════════════════════════════
 
 
 class TestGetStudentInfo:
-    def test_ok(self, client, seed_student):
-        resp = client.get(f"/api/student/info?student_id={seed_student.id}")
+    def test_ok(self, client, seed_student, auth_headers_student):
+        resp = client.get(f"/api/student/info?student_id={seed_student.id}", headers=auth_headers_student)
         assert resp.status_code == 200
         data = resp.json()
         assert data["real_name"] == seed_student.real_name
 
-    def test_not_found(self, client):
-        resp = client.get("/api/student/info?student_id=99999")
+    def test_not_found(self, client, auth_headers_student):
+        resp = client.get("/api/student/info?student_id=99999", headers=auth_headers_student)
         assert resp.status_code == 404
 
-    def test_employee_not_student(self, client, seed_employee):
-        resp = client.get(f"/api/student/info?student_id={seed_employee.id}")
+    def test_employee_not_student(self, client, seed_employee, auth_headers_employee):
+        resp = client.get(f"/api/student/info?student_id={seed_employee.id}", headers=auth_headers_employee)
         assert resp.status_code == 404
 
-    def test_missing_param_422(self, client):
-        resp = client.get("/api/student/info")
+    def test_missing_param_422(self, client, auth_headers_student):
+        resp = client.get("/api/student/info", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_invalid_type_422(self, client):
-        resp = client.get("/api/student/info?student_id=abc")
+    def test_invalid_type_422(self, client, auth_headers_student):
+        resp = client.get("/api/student/info?student_id=abc", headers=auth_headers_student)
         assert resp.status_code == 422
+
+    def test_auth_required_401(self, client):
+        resp = client.get("/api/student/info?student_id=1")
+        assert resp.status_code == 401
 
 
 # ══════════════════════════════════════════════════════════════════════
-# POST /api/student/leave  (需认证)
+# POST /api/student/leave  (需学生认证)
 # ══════════════════════════════════════════════════════════════════════
 
 
@@ -129,31 +133,35 @@ class TestCreateLeave:
 
 
 # ══════════════════════════════════════════════════════════════════════
-# GET /api/student/leave  (公开接口)
+# GET /api/student/leave  (需认证)
 # ══════════════════════════════════════════════════════════════════════
 
 
 class TestListLeaves:
-    def test_list_all(self, client):
-        resp = client.get("/api/student/leave")
+    def test_list_all(self, client, auth_headers_student):
+        resp = client.get("/api/student/leave", headers=auth_headers_student)
         assert resp.status_code == 200
         assert "leaves" in resp.json()
 
-    def test_filter_by_student(self, client, seed_student):
-        resp = client.get(f"/api/student/leave?student_id={seed_student.id}")
+    def test_filter_by_student(self, client, seed_student, auth_headers_student):
+        resp = client.get(f"/api/student/leave?student_id={seed_student.id}", headers=auth_headers_student)
         assert resp.status_code == 200
 
-    def test_invalid_student_id_type(self, client):
-        resp = client.get("/api/student/leave?student_id=abc")
+    def test_invalid_student_id_type(self, client, auth_headers_student):
+        resp = client.get("/api/student/leave?student_id=abc", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_student_not_found(self, client):
-        resp = client.get("/api/student/leave?student_id=99999")
+    def test_student_not_found(self, client, auth_headers_student):
+        resp = client.get("/api/student/leave?student_id=99999", headers=auth_headers_student)
         assert resp.status_code == 404
+
+    def test_auth_required_401(self, client):
+        resp = client.get("/api/student/leave")
+        assert resp.status_code == 401
 
 
 # ══════════════════════════════════════════════════════════════════════
-# POST /api/student/feedback  (需认证)
+# POST /api/student/feedback  (需学生认证)
 # ══════════════════════════════════════════════════════════════════════
 
 
@@ -228,30 +236,75 @@ class TestCreateFeedback:
 
 
 # ══════════════════════════════════════════════════════════════════════
-# GET /api/student/feedback  (公开接口)
+# GET /api/student/feedback  (需认证)
 # ══════════════════════════════════════════════════════════════════════
 
 
 class TestListFeedback:
-    def test_list_all(self, client):
-        resp = client.get("/api/student/feedback")
+    def test_list_all(self, client, auth_headers_student):
+        resp = client.get("/api/student/feedback", headers=auth_headers_student)
         assert resp.status_code == 200
 
-    def test_filter_by_student(self, client, seed_student):
-        resp = client.get(f"/api/student/feedback?student_id={seed_student.id}")
+    def test_filter_by_student(self, client, seed_student, auth_headers_student):
+        resp = client.get(f"/api/student/feedback?student_id={seed_student.id}", headers=auth_headers_student)
         assert resp.status_code == 200
 
-    def test_invalid_type_422(self, client):
-        resp = client.get("/api/student/feedback?student_id=abc")
+    def test_invalid_type_422(self, client, auth_headers_student):
+        resp = client.get("/api/student/feedback?student_id=abc", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_student_not_found(self, client):
-        resp = client.get("/api/student/feedback?student_id=99999")
+    def test_student_not_found(self, client, auth_headers_student):
+        resp = client.get("/api/student/feedback?student_id=99999", headers=auth_headers_student)
         assert resp.status_code == 404
+
+    def test_auth_required_401(self, client):
+        resp = client.get("/api/student/feedback")
+        assert resp.status_code == 401
 
 
 # ══════════════════════════════════════════════════════════════════════
-# POST /api/student/psych-alert  (需认证)
+# PUT /api/student/feedback/{ticket_id}/resolve  (需认证)
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestResolveFeedback:
+    def test_ok(self, client, seed_student, seed_employee, auth_headers_employee, db_session):
+        """老师处理投诉反馈工单"""
+        from model import StudentFeedbackTicket
+        ticket = StudentFeedbackTicket(
+            student_id=seed_student.id,
+            feedback_type="投诉",
+            content="测试工单内容",
+            urgency_level="中",
+            status="待处理",
+        )
+        db_session.add(ticket)
+        db_session.flush()
+
+        resp = client.put(f"/api/student/feedback/{ticket.id}/resolve", json={
+            "solution": "已联系学生并解决问题",
+            "handle_user_id": seed_employee.id,
+        }, headers=auth_headers_employee)
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    def test_not_found(self, client, seed_employee, auth_headers_employee):
+        resp = client.put("/api/student/feedback/99999/resolve", json={
+            "solution": "测试",
+            "handle_user_id": seed_employee.id,
+        }, headers=auth_headers_employee)
+        assert resp.status_code == 404
+
+    def test_auth_required_401(self, client):
+        resp = client.put("/api/student/feedback/1/resolve", json={
+            "solution": "test",
+            "handle_user_id": 1,
+        })
+        assert resp.status_code == 401
+
+
+# ══════════════════════════════════════════════════════════════════════
+# POST /api/student/psych-alert  (需学生认证)
 # ══════════════════════════════════════════════════════════════════════
 
 
@@ -299,85 +352,97 @@ class TestCreatePsychAlert:
 
 
 # ══════════════════════════════════════════════════════════════════════
-# GET /api/student/psych-alert  (公开接口)
+# GET /api/student/psych-alert  (需认证)
 # ══════════════════════════════════════════════════════════════════════
 
 
 class TestListPsychAlerts:
-    def test_list_all(self, client):
-        resp = client.get("/api/student/psych-alert")
+    def test_list_all(self, client, auth_headers_student):
+        resp = client.get("/api/student/psych-alert", headers=auth_headers_student)
         assert resp.status_code == 200
 
-    def test_filter_by_risk_level(self, client):
-        resp = client.get("/api/student/psych-alert?risk_level=high")
+    def test_filter_by_risk_level(self, client, auth_headers_student):
+        resp = client.get("/api/student/psych-alert?risk_level=high", headers=auth_headers_student)
         assert resp.status_code == 200
 
-    def test_invalid_risk_level_422(self, client):
-        resp = client.get("/api/student/psych-alert?risk_level=unknown")
+    def test_invalid_risk_level_422(self, client, auth_headers_student):
+        resp = client.get("/api/student/psych-alert?risk_level=unknown", headers=auth_headers_student)
         assert resp.status_code == 422
+
+    def test_auth_required_401(self, client):
+        resp = client.get("/api/student/psych-alert")
+        assert resp.status_code == 401
 
 
 # ══════════════════════════════════════════════════════════════════════
-# GET /api/student/academic  (公开接口，有 _validate_student)
+# GET /api/student/academic  (需认证)
 # ══════════════════════════════════════════════════════════════════════
 
 
 class TestListAcademic:
-    def test_ok(self, client, seed_student):
-        resp = client.get(f"/api/student/academic?student_id={seed_student.id}")
+    def test_ok(self, client, seed_student, auth_headers_student):
+        resp = client.get(f"/api/student/academic?student_id={seed_student.id}", headers=auth_headers_student)
         assert resp.status_code == 200
 
-    def test_filter_by_type(self, client, seed_student):
-        resp = client.get(f"/api/student/academic?student_id={seed_student.id}&academic_type=考试")
+    def test_filter_by_type(self, client, seed_student, auth_headers_student):
+        resp = client.get(f"/api/student/academic?student_id={seed_student.id}&academic_type=考试", headers=auth_headers_student)
         assert resp.status_code == 200
 
-    def test_missing_student_id_422(self, client):
-        resp = client.get("/api/student/academic")
+    def test_missing_student_id_422(self, client, auth_headers_student):
+        resp = client.get("/api/student/academic", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_invalid_student_id_422(self, client):
-        resp = client.get("/api/student/academic?student_id=abc")
+    def test_invalid_student_id_422(self, client, auth_headers_student):
+        resp = client.get("/api/student/academic?student_id=abc", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_not_found_student(self, client):
-        resp = client.get("/api/student/academic?student_id=99999")
+    def test_not_found_student(self, client, auth_headers_student):
+        resp = client.get("/api/student/academic?student_id=99999", headers=auth_headers_student)
         assert resp.status_code == 404
+
+    def test_auth_required_401(self, client):
+        resp = client.get("/api/student/academic?student_id=1")
+        assert resp.status_code == 401
 
 
 # ══════════════════════════════════════════════════════════════════════
-# GET /api/student/academic/upcoming  (公开接口)
+# GET /api/student/academic/upcoming  (需认证)
 # ══════════════════════════════════════════════════════════════════════
 
 
 class TestListUpcomingAcademic:
-    def test_ok(self, client, seed_student):
-        resp = client.get(f"/api/student/academic/upcoming?student_id={seed_student.id}")
+    def test_ok(self, client, seed_student, auth_headers_student):
+        resp = client.get(f"/api/student/academic/upcoming?student_id={seed_student.id}", headers=auth_headers_student)
         assert resp.status_code == 200
 
-    def test_custom_days(self, client, seed_student):
-        resp = client.get(f"/api/student/academic/upcoming?student_id={seed_student.id}&days=30")
+    def test_custom_days(self, client, seed_student, auth_headers_student):
+        resp = client.get(f"/api/student/academic/upcoming?student_id={seed_student.id}&days=30", headers=auth_headers_student)
         assert resp.status_code == 200
 
-    def test_invalid_days_422(self, client, seed_student):
-        resp = client.get(f"/api/student/academic/upcoming?student_id={seed_student.id}&days=abc")
+    def test_invalid_days_422(self, client, seed_student, auth_headers_student):
+        resp = client.get(f"/api/student/academic/upcoming?student_id={seed_student.id}&days=abc", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_missing_student_id_422(self, client):
-        resp = client.get("/api/student/academic/upcoming")
+    def test_missing_student_id_422(self, client, auth_headers_student):
+        resp = client.get("/api/student/academic/upcoming", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_not_found_student(self, client):
-        resp = client.get("/api/student/academic/upcoming?student_id=99999")
+    def test_not_found_student(self, client, auth_headers_student):
+        resp = client.get("/api/student/academic/upcoming?student_id=99999", headers=auth_headers_student)
         assert resp.status_code == 404
+
+    def test_auth_required_401(self, client):
+        resp = client.get("/api/student/academic/upcoming?student_id=1")
+        assert resp.status_code == 401
 
 
 # ══════════════════════════════════════════════════════════════════════
-# GET /api/student/study-abroad  (公开接口)
+# GET /api/student/study-abroad  (需认证)
 # ══════════════════════════════════════════════════════════════════════
 
 
 class TestListStudyAbroad:
-    def test_ok_with_data(self, client, seed_student, db_session):
+    def test_ok_with_data(self, client, seed_student, auth_headers_student, db_session):
         from model import StudentStudyAbroadProgress
 
         progress = StudentStudyAbroadProgress(
@@ -396,81 +461,183 @@ class TestListStudyAbroad:
         db_session.add(progress)
         db_session.flush()
 
-        resp = client.get(f"/api/student/study-abroad?student_id={seed_student.id}")
+        resp = client.get(f"/api/student/study-abroad?student_id={seed_student.id}", headers=auth_headers_student)
         assert resp.status_code == 200
         data = resp.json()
         assert "progress" in data
         assert len(data["progress"]) >= 1
 
-    def test_empty_progress(self, client, seed_student):
-        resp = client.get(f"/api/student/study-abroad?student_id={seed_student.id}")
+    def test_empty_progress(self, client, seed_student, auth_headers_student):
+        resp = client.get(f"/api/student/study-abroad?student_id={seed_student.id}", headers=auth_headers_student)
         assert resp.status_code == 200
         data = resp.json()
         if len(data.get("progress", [])) == 0:
             assert "暂无" in data.get("message", "")
 
-    def test_missing_student_id_422(self, client):
-        resp = client.get("/api/student/study-abroad")
+    def test_missing_student_id_422(self, client, auth_headers_student):
+        resp = client.get("/api/student/study-abroad", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_not_found_student(self, client):
-        resp = client.get("/api/student/study-abroad?student_id=99999")
+    def test_not_found_student(self, client, auth_headers_student):
+        resp = client.get("/api/student/study-abroad?student_id=99999", headers=auth_headers_student)
         assert resp.status_code == 404
+
+    def test_auth_required_401(self, client):
+        resp = client.get("/api/student/study-abroad?student_id=1")
+        assert resp.status_code == 401
 
 
 # ══════════════════════════════════════════════════════════════════════
-# GET /api/student/study-abroad/current  (公开接口)
+# GET /api/student/study-abroad/current  (需认证)
 # ══════════════════════════════════════════════════════════════════════
 
 
 class TestGetCurrentStage:
-    def test_no_current_stage(self, client, seed_student):
-        resp = client.get(f"/api/student/study-abroad/current?student_id={seed_student.id}")
+    def test_no_current_stage(self, client, seed_student, auth_headers_student):
+        resp = client.get(f"/api/student/study-abroad/current?student_id={seed_student.id}", headers=auth_headers_student)
         assert resp.status_code == 200
         data = resp.json()
         assert "暂无" in data.get("message", "")
 
-    def test_missing_student_id_422(self, client):
-        resp = client.get("/api/student/study-abroad/current")
+    def test_missing_student_id_422(self, client, auth_headers_student):
+        resp = client.get("/api/student/study-abroad/current", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_not_found_student(self, client):
-        resp = client.get("/api/student/study-abroad/current?student_id=99999")
+    def test_not_found_student(self, client, auth_headers_student):
+        resp = client.get("/api/student/study-abroad/current?student_id=99999", headers=auth_headers_student)
         assert resp.status_code == 404
+
+    def test_auth_required_401(self, client):
+        resp = client.get("/api/student/study-abroad/current?student_id=1")
+        assert resp.status_code == 401
 
 
 # ══════════════════════════════════════════════════════════════════════
-# POST /api/student/chat  (公开接口)
+# 站内通知接口 (需认证)
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestNotifications:
+    def test_list_empty(self, client, seed_student, auth_headers_student):
+        resp = client.get(f"/api/student/notification?recipient_id={seed_student.id}", headers=auth_headers_student)
+        assert resp.status_code == 200
+        assert "notifications" in resp.json()
+        assert resp.json()["notifications"] == []
+
+    def test_list_with_data(self, client, seed_student, auth_headers_student, db_session):
+        from model import Notification
+        notif = Notification(
+            recipient_id=seed_student.id,
+            title="测试通知",
+            content="这是一条测试通知",
+            notification_type="system",
+        )
+        db_session.add(notif)
+        db_session.flush()
+
+        resp = client.get(f"/api/student/notification?recipient_id={seed_student.id}", headers=auth_headers_student)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data["notifications"]) >= 1
+        assert data["notifications"][0]["title"] == "测试通知"
+
+    def test_unread_count(self, client, seed_student, auth_headers_student, db_session):
+        from model import Notification
+        notif = Notification(
+            recipient_id=seed_student.id,
+            title="未读通知",
+            content="内容",
+            notification_type="system",
+            is_read=0,
+        )
+        db_session.add(notif)
+        db_session.flush()
+
+        resp = client.get(f"/api/student/notification/unread-count?recipient_id={seed_student.id}", headers=auth_headers_student)
+        assert resp.status_code == 200
+        assert resp.json()["unread_count"] >= 1
+
+    def test_mark_read(self, client, seed_student, auth_headers_student, db_session):
+        from model import Notification
+        notif = Notification(
+            recipient_id=seed_student.id,
+            title="待读通知",
+            content="内容",
+            notification_type="system",
+            is_read=0,
+        )
+        db_session.add(notif)
+        db_session.flush()
+
+        resp = client.put(
+            f"/api/student/notification/{notif.id}/read?recipient_id={seed_student.id}",
+            headers=auth_headers_student,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    def test_mark_read_not_found(self, client, seed_student, auth_headers_student):
+        resp = client.put(
+            f"/api/student/notification/99999/read?recipient_id={seed_student.id}",
+            headers=auth_headers_student,
+        )
+        assert resp.status_code == 404
+
+    def test_mark_all_read(self, client, seed_student, auth_headers_student, db_session):
+        from model import Notification
+        n1 = Notification(recipient_id=seed_student.id, title="n1", content="c1", notification_type="system", is_read=0)
+        n2 = Notification(recipient_id=seed_student.id, title="n2", content="c2", notification_type="system", is_read=0)
+        db_session.add_all([n1, n2])
+        db_session.flush()
+
+        resp = client.put(
+            f"/api/student/notification/read-all?recipient_id={seed_student.id}",
+            headers=auth_headers_student,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["success"] is True
+
+    def test_auth_required_401(self, client, seed_student):
+        resp = client.get(f"/api/student/notification?recipient_id={seed_student.id}")
+        assert resp.status_code == 401
+
+
+# ══════════════════════════════════════════════════════════════════════
+# POST /api/student/chat  (需学生认证)
 # ══════════════════════════════════════════════════════════════════════
 
 
 class TestStudentChat:
-    def test_ok(self, client):
+    def test_ok(self, client, auth_headers_student):
         with patch(
             "agents.student.agent.StudentAgent.route_intent",
             return_value={"intent": "chitchat", "response": "你好！", "confidence": 0.95},
         ):
-            resp = client.post("/api/student/chat", json={"message": "你好", "student_id": 1})
+            resp = client.post("/api/student/chat", json={"message": "你好", "student_id": 1}, headers=auth_headers_student)
         assert resp.status_code == 200
         data = resp.json()
         assert data["intent"] == "chitchat"
 
-    def test_empty_message(self, client):
+    def test_empty_message(self, client, auth_headers_student):
         with patch(
             "agents.student.agent.StudentAgent.route_intent",
             return_value={"intent": "unknown", "response": "", "confidence": 0.0},
         ):
-            resp = client.post("/api/student/chat", json={"message": ""})
+            resp = client.post("/api/student/chat", json={"message": ""}, headers=auth_headers_student)
         assert resp.status_code == 200
 
-    def test_missing_body_422(self, client):
-        resp = client.post("/api/student/chat", content=b"not json", headers={"Content-Type": "application/json"})
+    def test_missing_body_422(self, client, auth_headers_student):
+        resp = client.post("/api/student/chat", content=b"not json", headers={"Content-Type": "application/json", **auth_headers_student})
         assert resp.status_code == 422
 
-    def test_special_chars_message(self, client):
+    def test_special_chars_message(self, client, auth_headers_student):
         with patch(
             "agents.student.agent.StudentAgent.route_intent",
             return_value={"intent": "unknown", "response": "", "confidence": 0.0},
         ):
-            resp = client.post("/api/student/chat", json={"message": "<script>alert('xss')</script>"})
+            resp = client.post("/api/student/chat", json={"message": "<script>alert('xss')</script>"}, headers=auth_headers_student)
         assert resp.status_code == 200
+
+    def test_auth_required_401(self, client):
+        resp = client.post("/api/student/chat", json={"message": "hello"})
+        assert resp.status_code == 401
