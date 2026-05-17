@@ -24,6 +24,7 @@ SYSTEM_PROMPT = """你是"粤教服务"的智能客服助手"小粤"，负责为
 - event_registration: 活动报名
 - faq: 常见问题
 - profile_match: 客户画像研判
+- feedback: 投诉/建议/对服务不满/反馈问题
 - chitchat: 日常闲聊
 """
 
@@ -35,6 +36,7 @@ INTENT_DESCRIPTIONS = {
     "event_registration": "想报名或查询活动讲座",
     "faq": "常见问题，如退费、流程等",
     "profile_match": "提供个人信息让系统匹配留学项目",
+    "feedback": "投诉/建议/对服务不满/反馈问题",
     "chitchat": "日常闲聊、寒暄等",
 }
 

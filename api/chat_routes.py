@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from utils.llm_client import get_llm_client
+from utils.conversation_state import get_conversation_state_manager
 from agents.customer_service.agent import CustomerServiceAgent
 from agents.enterprise.agent import EnterpriseAgent
 from agents.student.agent import StudentAgent
@@ -18,12 +19,13 @@ router = APIRouter(tags=["统一对话入口"])
 class ChatRequest(BaseModel):
     message: str
     student_id: int | None = None
+    user_id: int | None = None
 
 
 TOP_LEVEL_INTENTS = {
     "customer": "外部客户咨询：了解公司信息/业务项目/留学政策/活动报名/客户画像等",
     "enterprise": "企业内部办公：员工日报/CRM客户管理/数据查询/审批/新人指引/仪表盘等",
-    "student": "留学生服务：请假申请/心理关怀/学业查询/留学进度/生活支持/反馈建议等",
+    "student": "留学生服务：请假申请/心理关怀/学业查询/留学进度/生活支持/投诉反馈/建议等",
 }
 
 # 本地关键词意图识别（LLM不可用时的 fallback）
@@ -31,7 +33,8 @@ ENTERPRISE_KW = ['客户', 'crm', '日报', '审批', '仪表盘', '数据', '�
                  '员工', '成绩', '请假', '录入', '更新', '修改', '跟进', '签约', '意向',
                  '查询', 'sql', '数据库', '表', '周报', '月报', '工作记录']
 STUDENT_KW = ['我的', '成绩', '考试', '论文', '作业', 'ddl', '截止', '留学', '申请',
-              '签证', '心理', '焦虑', '压力', '请假', '通知', '进度', '阶段', '课程']
+              '签证', '心理', '焦虑', '压力', '请假', '通知', '进度', '阶段', '课程',
+              '投诉', '反馈', '建议', '不满', '售后']
 CUSTOMER_KW = ['项目', '课程', '费用', '学费', '报名', '活动', '讲座', '留学', '签证',
                '政策', '退款', '退费', '公司', '地址', '电话', '客服', '咨询', '推荐']
 CHITCHAT_KW = ['天气', '吃饭', '电影', '音乐', '游戏', '运动', '周末', '干嘛', '无聊',
@@ -69,7 +72,33 @@ def _local_classify(message: str) -> str:
 def chat(req: ChatRequest, db: Session = Depends(get_db)):
     """统一对话入口 —— LLM 意图识别优先，本地关键词兜底"""
     llm = get_llm_client()
+    stm = get_conversation_state_manager()
     message = req.message.strip()
+
+    # 0. 检查是否处于多轮数据收集会话中
+    active_state = stm.get(student_id=req.student_id, user_id=req.user_id)
+    if active_state:
+        # 处于槽位填充流程中，跳过意图识别，交给对应 Agent 继续收集
+        agent_type = active_state.agent_type
+        if agent_type == "student":
+            agent = StudentAgent()
+            output = agent.continue_data_collection(
+                message, active_state, student_id=req.student_id, db=db
+            )
+            output["agent"] = "student"
+        elif agent_type == "enterprise":
+            agent = EnterpriseAgent()
+            output = agent.continue_data_collection(
+                message, active_state, user_id=req.user_id, db=db
+            )
+            output["agent"] = "enterprise"
+        else:  # customer
+            agent = CustomerServiceAgent()
+            output = agent.continue_data_collection(
+                message, active_state, student_id=req.student_id, db=db
+            )
+            output["agent"] = "customer"
+        return output
 
     # 1. 优先用 LLM 做意图分类
     agent_type = None
@@ -96,7 +125,7 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
         output["agent"] = "student"
     else:
         agent = CustomerServiceAgent()
-        output = agent.route_intent(req.message)
+        output = agent.route_intent(req.message, student_id=req.student_id, db=db)
         output["agent"] = "customer"
 
     return output

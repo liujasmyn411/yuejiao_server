@@ -10,6 +10,10 @@ from agents.student.psych_monitor import PsychMonitor
 from agents.student.approval_flow import ApprovalFlow
 from knowledge_base.vectorizer import get_rag_engine
 from utils.llm_client import get_llm_client
+from utils.conversation_state import (
+    get_conversation_state_manager, SlotState
+)
+from utils.date_parser import normalize_datetime
 
 
 class StudentAgent:
@@ -57,24 +61,7 @@ class StudentAgent:
 
     def _handle_admin_service(self, user_input: str, entities: dict,
                               student_id: int, db) -> str:
-        """行政服务 —— 请假申请/查询"""
-        # 判断是提交还是查询
-        if any(w in user_input for w in ["请假", "申请", "提交", "想请"]):
-            info = self.approval.extract_leave_info(user_input)
-            lines = [
-                "📝 已识别到请假申请，请确认以下信息：",
-                f"  类型: {info.get('leave_type', '事假')}",
-                f"  开始: {info.get('start_time', '待确认')}",
-                f"  结束: {info.get('end_time', '待确认')}",
-                f"  原因: {info.get('reason', user_input[:100])}",
-            ]
-            if student_id:
-                lines.append(f"\n确认后将提交至 student_id={student_id}")
-                lines.append("提交接口: POST /api/student/leave")
-            else:
-                lines.append("\n请提供你的学生ID以完成提交。")
-            return "\n".join(lines)
-
+        """行政服务 —— 请假申请/查询（槽位填充）"""
         # 查询审批状态
         if any(w in user_input for w in ["查询", "状态", "进度", "审批", "通过"]):
             return (
@@ -82,6 +69,75 @@ class StudentAgent:
                 "  • GET /api/student/leave?student_id=你的ID\n"
                 "  • 直接告诉我你的学生ID，我帮你查~"
             )
+
+        # 请假提交 → 槽位填充
+        LEAVE_KW = ["请假", "申请", "提交", "想请", "生病", "不舒服", "感冒", "发烧",
+                     "头疼", "肚子", "休息", "病假", "事假", "旷", "缺"]
+        if any(w in user_input for w in LEAVE_KW):
+            stm = get_conversation_state_manager()
+            info = self.approval.extract_leave_info(user_input)
+            context = {"student_id": student_id, "service_type": "请假"}
+
+            # 判断用户是否提供了足够的请假信息
+            has_leave_type = bool(info.get("leave_type"))
+            has_start = bool(info.get("start_time"))
+            has_end = bool(info.get("end_time"))
+            has_reason = bool(info.get("reason")) and len(str(info.get("reason", ""))) > 2
+
+            if has_leave_type and has_start and has_end and has_reason and student_id and db:
+                # 信息齐全 → 进入确认阶段（不直接写入）
+                stm = get_conversation_state_manager()
+                context = {"student_id": student_id, "service_type": "请假"}
+                state = stm.start(
+                    intent="admin_service",
+                    table_name="student_admin_service",
+                    agent_type="student",
+                    student_id=student_id,
+                    context=context,
+                )
+                for field_name, value in info.items():
+                    if value and field_name in state.missing:
+                        state.collect(field_name, value)
+                state.phase = "confirming"
+                stm.update(state, student_id=student_id)
+
+                return (
+                    f"📝 请假信息已识别：\n\n{state.summary()}\n\n"
+                    f"回复「确认」提交申请，回复「取消」放弃，或继续修改~"
+                )
+
+            # 信息不完整 → 启动槽位填充
+            state = stm.start(
+                intent="admin_service",
+                table_name="student_admin_service",
+                agent_type="student",
+                student_id=student_id,
+                context=context,
+            )
+            for field_name, value in info.items():
+                if value and field_name in state.missing:
+                    state.collect(field_name, value)
+            stm.update(state, student_id=student_id)
+
+            missing_parts = []
+            if not has_leave_type:
+                missing_parts.append("请假类型（病假/事假）")
+            if not has_start:
+                missing_parts.append("开始时间")
+            if not has_end:
+                missing_parts.append("结束时间")
+            if not has_reason:
+                missing_parts.append("请假原因")
+
+            return (
+                f"📝 我来帮你提交请假申请。还需要补充以下信息：\n"
+                + "\n".join(f"  • {m}" for m in missing_parts)
+                + f"\n\n已识别: {info.get('leave_type', '?')} | "
+                  f"{info.get('start_time', '?')} ~ {info.get('end_time', '?')} | "
+                  f"{info.get('reason', '?')}\n"
+                f"请一次性告诉我缺少的信息~"
+            )
+
         return "请问你是要提交请假申请，还是查询审批状态呢？"
 
     def _handle_psych_care(self, user_input: str, entities: dict,
@@ -98,24 +154,253 @@ class StudentAgent:
 
     def _handle_feedback(self, user_input: str, entities: dict,
                          student_id: int, db) -> str:
-        """售后反馈 —— 投诉/建议提交"""
+        """售后反馈 —— 投诉/建议提交（槽位填充：收集所有必填字段后再写入）"""
+        stm = get_conversation_state_manager()
+
+        # 1. 从用户输入提取已提供的信息
         info = self.llm.extract_info(
             user_input,
             ["反馈类型", "涉及人员", "详细描述", "期望解决方案"]
         )
+        extracted_content = info.get("详细描述", "") or user_input[:200]
 
-        lines = [
-            "📋 已收到你的反馈，我们非常重视！",
-            f"  类型: {info.get('反馈类型', '投诉/建议')}",
-            f"  内容: {info.get('详细描述', user_input[:150])}",
-        ]
-        if student_id:
-            lines.append(f"\n将为你创建工单 (student_id={student_id})")
-            lines.append("提交接口: POST /api/student/feedback")
-            lines.append("\n提交后我们会尽快处理，一般24小时内响应~")
-        else:
-            lines.append("\n请提供你的学生ID以创建工单。")
-        return "\n".join(lines)
+        # 2. 检查必填字段是否齐全
+        context = {"student_id": student_id} if student_id else {}
+
+        # 判断 content（反馈内容）是否充分
+        has_content = bool(extracted_content.strip()) and len(extracted_content) > 3
+        if not has_content:
+            # 用户只说"我要投诉"之类，没有具体内容 → 追问
+            state = stm.start(
+                intent="feedback",
+                table_name="student_feedback_ticket",
+                agent_type="student",
+                student_id=student_id,
+                context=context,
+            )
+            # 合并已提取的字段
+            for field_name, value in info.items():
+                if value and field_name in state.required_fields:
+                    state.collect(field_name, value)
+                    if field_name in state.missing:
+                        state.missing.remove(field_name)
+            stm.update(state, student_id=student_id)
+
+            return (
+                f"收到，我来帮你提交反馈。\n"
+                f"请详细描述你要{'投诉' if '投诉' in user_input else '反馈'}的具体内容，比如：\n"
+                f"  • 涉及哪些人员？\n"
+                f"  • 发生了什么事情？\n"
+                f"  • 你希望怎么解决？\n\n"
+                f"请一次性告诉我，我会整理后为你创建工单~"
+            )
+
+        # 3. 必填字段齐全 → 进入确认阶段（不直接写入）
+        if has_content:
+            stm = get_conversation_state_manager()
+            context = {"student_id": student_id} if student_id else {}
+            state = stm.start(
+                intent="feedback",
+                table_name="student_feedback_ticket",
+                agent_type="student",
+                student_id=student_id,
+                context=context,
+            )
+            state.collect("content", extracted_content[:200])
+            for field_name, value in info.items():
+                if value and field_name in state.missing:
+                    state.collect(field_name, value)
+            state.phase = "confirming"
+            stm.update(state, student_id=student_id)
+
+            return (
+                f"📋 已识别到你的反馈信息：\n\n{state.summary()}\n\n"
+                f"回复「确认」提交工单，回复「取消」放弃，或继续补充信息~"
+            )
+
+        if not student_id:
+            return "请提供你的学生ID以创建工单。"
+
+    def continue_data_collection(self, user_input: str, state: SlotState,
+                                 student_id: int = None, db=None) -> dict:
+        """通用槽位填充 —— 支持取消 + 确认 + 重新编辑"""
+        stm = get_conversation_state_manager()
+
+        # ===== 取消检测（所有阶段） =====
+        if SlotState.is_cancel(user_input):
+            stm.clear(student_id=student_id)
+            return {
+                "intent": state.intent,
+                "response": "好的，已取消当前操作。如有需要随时找我~",
+                "confidence": 0.95,
+            }
+
+        # ===== 确认阶段 =====
+        if state.phase == "confirming":
+            if SlotState.is_confirm(user_input):
+                # 用户确认 → 写入数据库
+                stm.clear(student_id=student_id)
+                return self._commit_collected(
+                    state, user_input,
+                    self._extract_for_intent(user_input, state.intent),
+                    student_id, db
+                )
+            else:
+                # 用户没说确认 → 当成补充信息，退回收集阶段
+                state.phase = "collecting"
+                info = self._extract_for_intent(user_input, state.intent)
+                self._merge_collected(state, info, user_input)
+                # 继续检查是否还缺字段
+                if not state.is_complete():
+                    stm.update(state, student_id=student_id)
+                    return {
+                        "intent": state.intent,
+                        "response": f"收到补充信息。还需要「{state.next_missing_display()}」，请描述一下~",
+                        "confidence": 0.85,
+                    }
+                # 不缺了，再次进入确认阶段
+                state.phase = "confirming"
+                stm.update(state, student_id=student_id)
+                return {
+                    "intent": state.intent,
+                    "response": (
+                        f"好的，已更新信息。请确认以下内容：\n\n{state.summary()}\n\n"
+                        f"回复「确认」提交，或继续补充其他信息~"
+                    ),
+                    "confidence": 0.9,
+                }
+
+        # ===== 收集阶段 =====
+        info = self._extract_for_intent(user_input, state.intent)
+        self._merge_collected(state, info, user_input)
+
+        if state.is_complete():
+            # 收集完整 → 进入确认阶段
+            state.phase = "confirming"
+            stm.update(state, student_id=student_id)
+            return {
+                "intent": state.intent,
+                "response": (
+                    f"信息已收集完整，请确认以下内容：\n\n{state.summary()}\n\n"
+                    f"回复「确认」提交，回复「取消」放弃，或继续补充信息~"
+                ),
+                "confidence": 0.9,
+            }
+
+        # 还有缺失 → 继续追问
+        stm.update(state, student_id=student_id)
+        return {
+            "intent": state.intent,
+            "response": (
+                f"收到，已记录你提供的信息。\n"
+                f"还需要补充「{state.next_missing_display()}」，请描述一下~"
+            ),
+            "confidence": 0.85,
+        }
+
+    def _extract_for_intent(self, user_input: str, intent: str) -> dict:
+        """根据意图提取对应的结构化信息"""
+        extractors = {
+            "feedback": ["反馈类型", "涉及人员", "详细描述", "期望解决方案"],
+            "admin_service": ["leave_type", "start_time", "end_time", "reason"],
+        }
+        fields = extractors.get(intent, ["content"])
+        return self.llm.extract_info(user_input, fields)
+
+    def _merge_collected(self, state: SlotState, info: dict, user_input: str) -> None:
+        """将提取到的信息合并到槽位状态中"""
+        # 通用 content 字段
+        if "content" in state.missing:
+            extracted = info.get("详细描述", "") or info.get("reason", "") or user_input
+            if extracted.strip() and len(extracted) > 3:
+                state.collect("content", extracted[:200])
+
+        # 请假相关字段（自动解析相对日期）
+        for f in ["leave_type", "reason", "service_type"]:
+            if f in state.missing and info.get(f):
+                state.collect(f, info[f])
+        for f in ["start_time", "end_time"]:
+            if f in state.missing and info.get(f):
+                val = info[f]
+                if isinstance(val, str):
+                    normalized = normalize_datetime(val)
+                    state.collect(f, normalized if normalized else val)
+                else:
+                    state.collect(f, val)
+
+        # 其他提取到的字段
+        for field_name, value in info.items():
+            if value and field_name in state.missing:
+                state.collect(field_name, value)
+
+    def _commit_collected(self, state: SlotState, user_input: str,
+                          info: dict, student_id: int, db) -> dict:
+        """所有必填字段收集完毕 → 写入数据库"""
+        if not db:
+            return {
+                "intent": state.intent,
+                "response": f"📋 信息已收集完整！请通过对应 API 接口提交。",
+                "confidence": 0.9,
+            }
+
+        try:
+            if state.intent == "feedback":
+                from crud import FeedbackCRUD
+                from schemas import FeedbackCreateRequest
+                req = FeedbackCreateRequest(
+                    student_id=student_id,
+                    content=state.collected.get("content", user_input[:200]),
+                    detail=info.get("详细描述", user_input),
+                    feedback_type=info.get("反馈类型", "投诉"),
+                    urgency_level="中",
+                )
+                ticket = FeedbackCRUD.create(db, req)
+                db.commit()
+                return {
+                    "intent": "feedback",
+                    "response": f"📋 已为你创建工单 #{ticket.id}，我们会在24小时内响应~",
+                    "confidence": 0.9,
+                }
+
+            elif state.intent == "admin_service":
+                from crud import StudentServiceCRUD
+                from schemas import LeaveCreateRequest
+                start_val = state.collected.get("start_time")
+                end_val = state.collected.get("end_time")
+                # 将相对日期（明天/后天等）转为标准 datetime
+                if isinstance(start_val, str):
+                    start_val = normalize_datetime(start_val) or start_val
+                if isinstance(end_val, str):
+                    end_val = normalize_datetime(end_val) or end_val
+                req = LeaveCreateRequest(
+                    student_id=student_id,
+                    service_type="请假",
+                    leave_type=state.collected.get("leave_type", "事假"),
+                    start_time=start_val,
+                    end_time=end_val,
+                    reason=state.collected.get("reason", user_input[:100]),
+                )
+                leave = StudentServiceCRUD.create_leave(db, req)
+                db.commit()
+                return {
+                    "intent": "admin_service",
+                    "response": (
+                        f"📝 请假申请已提交 (ID: {leave.id})\n"
+                        f"  类型: {state.collected.get('leave_type', '事假')}\n"
+                        f"  时间: {state.collected.get('start_time', '')} ~ {state.collected.get('end_time', '')}\n"
+                        f"  原因: {state.collected.get('reason', '')}\n\n"
+                        f"等待审批中，请留意通知~"
+                    ),
+                    "confidence": 0.9,
+                }
+
+            return {
+                "intent": state.intent,
+                "response": "数据已收集完整，请通过对应接口提交。",
+                "confidence": 0.9,
+            }
+        except Exception as e:
+            return {"intent": state.intent, "response": f"提交失败: {e}", "confidence": 0.9}
 
     def _handle_academic_query(self, user_input: str, entities: dict,
                                student_id: int, db) -> str:

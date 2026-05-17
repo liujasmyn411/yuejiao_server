@@ -10,6 +10,9 @@ from agents.enterprise.nl2sql import NL2SQL
 from agents.enterprise.voice_processor import VoiceProcessor
 from knowledge_base.vectorizer import get_rag_engine
 from utils.llm_client import get_llm_client
+from utils.conversation_state import (
+    get_conversation_state_manager, SlotState
+)
 
 
 class EnterpriseAgent:
@@ -56,14 +59,33 @@ class EnterpriseAgent:
     # ==================== 意图处理器 ====================
 
     def _handle_lead_create(self, user_input: str, entities: dict, db) -> str:
-        """录入意向客户 —— 提取信息后引导确认"""
+        """录入意向客户 —— 槽位填充，收集必填字段后写入"""
+        stm = get_conversation_state_manager()
         info = self.llm.extract_info(
             user_input,
             ["姓名", "年龄", "学历", "意向国家", "意向专业", "联系方式", "背景信息"]
         )
-        if not info.get("姓名"):
-            return "请提供客户的基本信息，至少需要姓名哦~ 比如：'录入新客户张三，19岁，高中生，想去新加坡读本科'"
 
+        customer_name = info.get("姓名", "")
+        # 必填字段：customer_name（需要通过 user_id 获取 employee_id）
+        if not customer_name:
+            state = stm.start(
+                intent="lead_create",
+                table_name="crm_lead",
+                agent_type="enterprise",
+                user_id=None,
+                context={},
+            )
+            for field_name, value in info.items():
+                if value and field_name in state.missing:
+                    state.collect(field_name, value)
+            stm.update(state, user_id=None)
+            return (
+                f"请提供客户的基本信息，至少需要姓名哦~\n"
+                f"比如：'录入新客户张三，19岁，高中生，想去新加坡读本科'"
+            )
+
+        # 有姓名，但可能缺 owner_employee_id → 需要告知 API 提交
         return (
             f"已识别到客户信息，请确认：\n"
             + "\n".join(f"  • {k}: {v}" for k, v in info.items() if v)
@@ -116,15 +138,34 @@ class EnterpriseAgent:
         )
 
     def _handle_daily_report(self, user_input: str, entities: dict, db) -> str:
-        """口述日报 → 结构化整理"""
+        """口述日报 → 结构化整理（槽位填充）"""
+        stm = get_conversation_state_manager()
         report = self.voice.text_to_report(user_input)
+
+        # 判断日报内容是否充分
+        summary = report.get("summary", "")
+        has_content = bool(summary and summary.strip() and len(summary) > 5)
+
+        if not has_content:
+            state = stm.start(
+                intent="daily_report",
+                table_name="employee_daily_report",
+                agent_type="enterprise",
+                context={},
+            )
+            stm.update(state)
+            return (
+                f"日报内容似乎不够详细，请多描述一下你今天的工作内容~\n"
+                f"比如：完成了什么任务、遇到了什么问题、明天的计划等。"
+            )
+
         lines = [
             "📋 日报已整理如下：",
             f"日期: {report.get('report_date', '')}",
             f"类型: {report.get('work_type', '')}",
             "",
             "核心内容:",
-            report.get("summary", ""),
+            summary,
         ]
         todos = report.get("todos", "")
         if todos and todos != "None":
@@ -290,6 +331,92 @@ class EnterpriseAgent:
             return f"关于「{user_input}」，我主要擅长企业办公协助。你可以试试：\n• 查询所有意向客户\n• 查看仪表盘\n• 帮我写日报\n需要哪方面的帮助？"
 
         return f"闲聊时间~ 不过说到正事，我可以帮你管理CRM客户、整理日报、查询数据。有什么工作上的需要吗？"
+
+    # ==================== 槽位填充 ====================
+
+    def continue_data_collection(self, user_input: str, state: SlotState,
+                                 user_id: int = None, db=None) -> dict:
+        """通用槽位填充 —— 支持取消 + 确认 + 重新编辑"""
+        stm = get_conversation_state_manager()
+
+        # ===== 取消检测 =====
+        if SlotState.is_cancel(user_input):
+            stm.clear(user_id=user_id)
+            return {
+                "intent": state.intent,
+                "response": "好的，已取消当前操作。如有需要随时找我~",
+                "confidence": 0.95,
+            }
+
+        # ===== 确认阶段 =====
+        if state.phase == "confirming":
+            if SlotState.is_confirm(user_input):
+                stm.clear(user_id=user_id)
+                return {
+                    "intent": state.intent,
+                    "response": (
+                        f"📋 信息已确认！请通过对应 API 接口提交：\n"
+                        f"  • 意向客户: POST /api/enterprise/lead\n"
+                        f"  • 日报: POST /api/enterprise/report"
+                    ),
+                    "confidence": 0.95,
+                }
+            else:
+                state.phase = "collecting"
+                self._merge_enterprise_fields(state, user_input)
+                if not state.is_complete():
+                    stm.update(state, user_id=user_id)
+                    return {
+                        "intent": state.intent,
+                        "response": f"收到补充。还需要「{state.next_missing_display()}」，请说明~",
+                        "confidence": 0.85,
+                    }
+                state.phase = "confirming"
+                stm.update(state, user_id=user_id)
+                return {
+                    "intent": state.intent,
+                    "response": f"已更新，请确认：\n\n{state.summary()}\n\n回复「确认」提交或继续补充~",
+                    "confidence": 0.9,
+                }
+
+        # ===== 收集阶段 =====
+        self._merge_enterprise_fields(state, user_input)
+
+        if state.is_complete():
+            state.phase = "confirming"
+            stm.update(state, user_id=user_id)
+            return {
+                "intent": state.intent,
+                "response": (
+                    f"信息已收集完整，请确认：\n\n{state.summary()}\n\n"
+                    f"回复「确认」提交，回复「取消」放弃，或继续补充~"
+                ),
+                "confidence": 0.9,
+            }
+
+        stm.update(state, user_id=user_id)
+        return {
+            "intent": state.intent,
+            "response": f"收到，还需要补充「{state.next_missing_display()}」，请详细说明~",
+            "confidence": 0.85,
+        }
+
+    def _merge_enterprise_fields(self, state: SlotState, user_input: str) -> None:
+        """合并企业相关提取字段到槽位状态"""
+        info = self.llm.extract_info(
+            user_input,
+            ["姓名", "年龄", "学历", "意向国家", "意向专业", "联系方式", "背景信息",
+             "日报内容", "工作类型", "待办事项"]
+        )
+        for field_name in list(state.missing):
+            if field_name == "content" and "日报内容" in info and info["日报内容"]:
+                state.collect("content", info["日报内容"][:200])
+            elif field_name == "content":
+                state.collect("content", user_input[:200])
+            elif field_name == "customer_name" and "姓名" in info and info["姓名"]:
+                state.collect("customer_name", info["姓名"])
+            elif field_name in info and info[field_name]:
+                state.collect(field_name, info[field_name])
 
     # ==================== 便捷入口 ====================
 

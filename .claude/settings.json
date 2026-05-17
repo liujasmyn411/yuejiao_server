@@ -40,7 +40,10 @@
       "Bash(git rm *)",
       "Bash(rm -f test_*.db test*.db)",
       "Bash(ls *.db)",
-      "Bash(taskkill -f -im python.exe)"
+      "Bash(taskkill -f -im python.exe)",
+      "Bash(python -m pytest tests/ -x -v)",
+      "Bash(python -m pytest tests/test_chat.py tests/test_student.py tests/test_customer.py -v)",
+      "Bash(python -m pytest tests/test_chat.py tests/test_student.py tests/test_customer.py tests/test_enterprise.py tests/test_report.py -v)"
     ]
   }
 }

@@ -5,6 +5,7 @@
 from datetime import datetime
 from typing import Optional
 from utils.llm_client import get_llm_client
+from utils.date_parser import normalize_datetime
 
 
 class ApprovalFlow:
@@ -140,7 +141,7 @@ class ApprovalFlow:
         ]
 
     def extract_leave_info(self, user_input: str) -> dict:
-        """从自然语言中提取请假信息"""
+        """从自然语言中提取请假信息，自动解析相对日期（明天/后天等）"""
         info = self.llm.extract_info(
             user_input,
             ["请假类型", "开始时间", "结束时间", "请假原因"]
@@ -154,9 +155,15 @@ class ApprovalFlow:
             else:
                 leave_type = "事假"
 
+        # 将相对日期表达转为标准 datetime
+        start_raw = info.get("开始时间")
+        end_raw = info.get("结束时间")
+        start_time = normalize_datetime(start_raw) if start_raw else None
+        end_time = normalize_datetime(end_raw) if end_raw else None
+
         return {
             "leave_type": leave_type,
-            "start_time": info.get("开始时间"),
-            "end_time": info.get("结束时间"),
+            "start_time": start_time,
+            "end_time": end_time,
             "reason": info.get("请假原因", user_input),
         }
