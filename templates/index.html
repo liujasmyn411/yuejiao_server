@@ -17,11 +17,21 @@
       <div class="chat-widget__header">
         <span id="chat-title">AI 助手</span>
         <div class="chat-widget__actions">
+          <button id="chat-history-btn" class="btn-icon" title="对话历史">☰</button>
           <button id="chat-minimize" class="btn-icon">─</button>
           <button id="chat-close" class="btn-icon">✕</button>
         </div>
       </div>
-      <div id="chat-messages" class="chat-widget__messages"></div>
+      <div class="chat-widget__body">
+        <div id="chat-history-panel" class="chat-history-panel hidden">
+          <div class="chat-history-panel__header">
+            <span>对话历史</span>
+            <button id="chat-history-clear" class="btn btn-sm btn-danger">清空</button>
+          </div>
+          <div id="chat-history-list" class="chat-history-list"></div>
+        </div>
+        <div id="chat-messages" class="chat-widget__messages"></div>
+      </div>
       <div class="chat-widget__input">
         <textarea id="chat-input" rows="1" placeholder="输入消息..."></textarea>
         <button id="chat-send" class="btn btn-primary btn-sm">发送</button>

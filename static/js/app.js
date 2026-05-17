@@ -42,8 +42,11 @@ const App = (() => {
   }
 
   function logout() {
+    // 保存当前会话到历史
+    ChatWidget.saveCurrentSession();
     localStorage.removeItem('access_token');
     localStorage.removeItem('user');
+    ChatWidget.setAgent(null, null);
     Sidebar.render();
     Topbar.render('/login');
     Router.navigate('/login');
