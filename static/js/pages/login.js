@@ -46,6 +46,11 @@ const LoginPage = (() => {
 
       try {
         const data = await API.post('/api/login', { username, password });
+        if (!data) {
+          errorEl.textContent = '登录失败，请检查用户名和密码';
+          errorEl.classList.remove('hidden');
+          return;
+        }
         localStorage.setItem('access_token', data.access_token);
         localStorage.setItem('user', JSON.stringify(data.user));
 

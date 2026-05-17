@@ -381,6 +381,8 @@ class CourseProjectSchema(BaseSchema):
     duration: Optional[str] = None
     description: Optional[str] = None
     target_audience: Optional[str] = None
+    age_min: Optional[int] = None
+    age_max: Optional[int] = None
     application_require: Optional[str] = None
     is_recommended: Optional[int] = 0
     sort_order: Optional[int] = 0

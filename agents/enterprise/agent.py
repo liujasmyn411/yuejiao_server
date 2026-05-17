@@ -208,7 +208,12 @@ class EnterpriseAgent:
         try:
             result = self.nl2sql.query(db, user_input)
             if "error" in result:
-                return f"查询失败: {result['error']}\n请尝试更具体的描述，如'查询所有意向为新加坡的客户'"
+                import logging
+                logging.getLogger(__name__).error(
+                    "NL2SQL查询失败(lead) | 输入: %s | 错误: %s | SQL: %s",
+                    user_input, result["error"], result.get("sql", "")
+                )
+                return "查询失败，请尝试更具体的描述，如'查询所有意向为新加坡的客户'"
 
             data = result.get("data", [])
             if not data:
@@ -225,7 +230,9 @@ class EnterpriseAgent:
                 lines.append(f"  ... 还有 {len(data) - 10} 条记录")
             return "\n".join(lines)
         except Exception as e:
-            return f"查询出错: {e}"
+            import logging
+            logging.getLogger(__name__).error("NL2SQL查询异常(lead) | 输入: %s | 异常: %s", user_input, str(e))
+            return "查询时遇到问题，请换个方式描述你的需求。"
 
     def _handle_lead_update(self, user_input: str, entities: dict, db) -> str:
         """更新意向客户状态"""
@@ -348,7 +355,7 @@ class EnterpriseAgent:
                     owner_employee_id=1,
                 )
                 db.add(lead)
-                db.flush()
+                db.commit()
                 lines.append(f"")
                 lines.append(f"✅ 已自动录入意向客户表（ID: {lead.id}），状态「新增意向」，渠道「AI对话-画像研判」。")
             except Exception as e:
@@ -555,13 +562,17 @@ class EnterpriseAgent:
         try:
             result = self.nl2sql.query(db, user_input)
             if "error" in result:
-                return f"查询失败: {result['error']}\n请尝试更具体的描述。"
+                import logging
+                logging.getLogger(__name__).error(
+                    "NL2SQL查询失败 | 输入: %s | 错误: %s | SQL: %s",
+                    user_input, result["error"], result.get("sql", "")
+                )
+                return "查询失败，请尝试更具体的描述，如'查询所有新加坡意向的客户'或'查询本周的日报'。"
 
             data = result.get("data", [])
-            sql = result.get("sql", "")
             explanation = result.get("explanation", "")
 
-            lines = [f"{explanation}\n执行SQL: `{sql}`\n"]
+            lines = [explanation] if explanation else ["查询结果："]
             if not data:
                 lines.append("查询结果为空。")
             else:
@@ -573,7 +584,9 @@ class EnterpriseAgent:
                     lines.append(f"  ... 还有 {len(data) - 15} 条")
             return "\n".join(lines)
         except Exception as e:
-            return f"查询出错: {e}"
+            import logging
+            logging.getLogger(__name__).error("NL2SQL查询异常 | 输入: %s | 异常: %s", user_input, str(e))
+            return "查询时遇到问题，请换个方式描述你的需求。"
 
     def _handle_company_guide(self, user_input: str, entities: dict, db) -> str:
         """公司新人指南 RAG 问答"""
@@ -903,6 +916,20 @@ class EnterpriseAgent:
         """通用槽位填充 —— 支持取消 + 确认 + 重新编辑"""
         stm = get_conversation_state_manager()
 
+        # ===== 第三层逃生：交互次数兜底 =====
+        state.interaction_count += 1
+        if state.interaction_count > SlotState.MAX_INTERACTIONS:
+            stm.clear(user_id=user_id)
+            return {
+                "intent": "chitchat",
+                "response": (
+                    f"对话轮次较多，已自动结束之前的"
+                    f"{'意向录入' if state.intent == 'lead_create' else '日报'}。"
+                    f"请问还有什么可以帮你的？"
+                ),
+                "confidence": 0.8,
+            }
+
         # ===== 取消检测 =====
         if SlotState.is_cancel(user_input):
             stm.clear(user_id=user_id)
@@ -926,8 +953,9 @@ class EnterpriseAgent:
                     "confidence": 0.95,
                 }
             stripped = user_input.strip()
-            # 短输入或切换话题 → 提供退出选项
-            if len(stripped) <= 5 or any(kw in stripped for kw in SlotState.SWITCH_TOPIC_KW):
+
+            # 条件A：短输入 → 可能是另起话题
+            if len(stripped) <= 5:
                 state.confirm_retries += 1
                 if state.confirm_retries >= 2:
                     stm.clear(user_id=user_id)
@@ -940,6 +968,25 @@ class EnterpriseAgent:
                 return {
                     "intent": state.intent,
                     "response": "你有一个待确认的提交。回复「确认」提交，「取消」放弃，或告诉我你想做什么~",
+                    "confidence": 0.85,
+                }
+
+            # 条件B：话题切换关键词
+            if any(kw in stripped for kw in SlotState.SWITCH_TOPIC_KW):
+                stm.clear(user_id=user_id)
+                return {
+                    "intent": "chitchat",
+                    "response": "好的，已取消当前操作。请重新描述你的需求，我来帮你处理~",
+                    "confidence": 0.85,
+                }
+
+            # 条件C：状态已完整 → 不是补充，是另起话题
+            # 条件D：状态不完整 → 当成补充信息
+            if state.is_complete():
+                stm.clear(user_id=user_id)
+                return {
+                    "intent": "chitchat",
+                    "response": "好的，已取消当前操作。请重新描述你的需求，我来帮你处理~",
                     "confidence": 0.85,
                 }
             state.confirm_retries = 0
@@ -961,6 +1008,16 @@ class EnterpriseAgent:
             }
 
         # ===== 收集阶段 =====
+        # 第一层逃生：话题切换关键词检测
+        stripped = user_input.strip()
+        if any(kw in stripped for kw in SlotState.SWITCH_TOPIC_KW):
+            stm.clear(user_id=user_id)
+            return {
+                "intent": "chitchat",
+                "response": "好的，已取消当前操作。请重新描述你的需求，我来帮你处理~",
+                "confidence": 0.85,
+            }
+
         self._merge_enterprise_fields(state, user_input)
 
         if state.is_complete():

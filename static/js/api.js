@@ -25,15 +25,20 @@ const API = (() => {
 
     try {
       const res = await fetch(BASE + url, config);
+      const data = await res.json();
       if (res.status === 401) {
+        // 登录接口的 401 直接抛错，不走"清登录态+跳转"逻辑
+        const detail = data.detail || '用户名或密码错误';
+        if (url === '/api/login') {
+          throw new Error(detail);
+        }
         localStorage.removeItem('access_token');
         localStorage.removeItem('user');
         if (typeof Sidebar !== 'undefined') Sidebar.render();
         if (typeof Topbar !== 'undefined') Topbar.render('/login');
         window.location.hash = '#/login';
-        return null;
+        throw new Error(detail);
       }
-      const data = await res.json();
       if (!res.ok) {
         throw new Error(data.detail || data.message || `请求失败 (${res.status})`);
       }

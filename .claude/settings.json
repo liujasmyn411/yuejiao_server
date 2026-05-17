@@ -52,7 +52,20 @@
       "Bash(python -m pytest tests/test_enterprise.py tests/test_student.py tests/test_chat.py -v)",
       "Bash(python -m pytest tests/test_enterprise.py tests/test_chat.py tests/test_student.py -v)",
       "Bash(python -m pytest tests/test_enterprise.py tests/test_chat.py -v)",
-      "Bash(python -c \"import py_compile; py_compile.compile\\('api/student_routes.py', doraise=True\\); py_compile.compile\\('api/enterprise_routes.py', doraise=True\\); py_compile.compile\\('api/customer_routes.py', doraise=True\\); py_compile.compile\\('crud/student_crud.py', doraise=True\\); py_compile.compile\\('crud/enterprise_crud.py', doraise=True\\); py_compile.compile\\('crud/customer_crud.py', doraise=True\\); py_compile.compile\\('utils/file_parser.py', doraise=True\\); py_compile.compile\\('agents/enterprise/agent.py', doraise=True\\); py_compile.compile\\('schemas/schemas.py', doraise=True\\); py_compile.compile\\('schemas/__init__.py', doraise=True\\); print\\('All files compile OK'\\)\")"
+      "Bash(python -c \"import py_compile; py_compile.compile\\('api/student_routes.py', doraise=True\\); py_compile.compile\\('api/enterprise_routes.py', doraise=True\\); py_compile.compile\\('api/customer_routes.py', doraise=True\\); py_compile.compile\\('crud/student_crud.py', doraise=True\\); py_compile.compile\\('crud/enterprise_crud.py', doraise=True\\); py_compile.compile\\('crud/customer_crud.py', doraise=True\\); py_compile.compile\\('utils/file_parser.py', doraise=True\\); py_compile.compile\\('agents/enterprise/agent.py', doraise=True\\); py_compile.compile\\('schemas/schemas.py', doraise=True\\); py_compile.compile\\('schemas/__init__.py', doraise=True\\); print\\('All files compile OK'\\)\")",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('agents/enterprise/agent.py', doraise=True\\); py_compile.compile\\('utils/file_parser.py', doraise=True\\); print\\('OK'\\)\")",
+      "Bash(python -c \"from utils.conversation_state import SlotState, ConversationStateManager, get_conversation_state_manager; print\\('conversation_state.py OK'\\); print\\('MAX_INTERACTIONS:', SlotState.MAX_INTERACTIONS\\); print\\('SWITCH_TOPIC_KW count:', len\\(SlotState.SWITCH_TOPIC_KW\\)\\)\")",
+      "Bash(python -c \"from agents.student.agent import StudentAgent; print\\('StudentAgent OK'\\)\")",
+      "Bash(python -c \"from agents.customer_service.agent import CustomerServiceAgent; print\\('CustomerServiceAgent OK'\\)\")",
+      "Bash(python -c \"from agents.enterprise.agent import EnterpriseAgent; print\\('EnterpriseAgent OK'\\)\")",
+      "Bash(python -c \"from api.chat_routes import router; print\\('chat_routes.py OK'\\)\")",
+      "Bash(python -c \"from agents.enterprise.nl2sql import NL2SQL; nl2sql = NL2SQL\\(\\); sql = 'SELECT * FROM student_admin_service WHERE student_id = ? AND delete_flag = 0'; result = nl2sql._apply_student_scope\\(sql, 7\\); print\\('Result:', result\\); assert '?' not in result, 'BUG: ? still in SQL'; assert 'student_id = 7' in result, 'BUG: student_id not injected'; print\\('OK'\\)\")",
+      "Bash(python -m pytest tests/test_enterprise.py -v -k \"NL2SQL\" --tb=short)",
+      "Bash(python -c \"from agents.student.agent import StudentAgent; from agents.enterprise.agent import EnterpriseAgent; print\\('OK'\\)\")",
+      "Bash(python -c \"import sqlite3; conn = sqlite3.connect\\('yuejiao.db'\\); cursor = conn.execute\\(\\\\\"SELECT name FROM sqlite_master WHERE type='table'\\\\\"\\); print\\([r[0] for r in cursor.fetchall\\(\\)]\\); conn.close\\(\\)\")",
+      "Bash(python -c \"import sqlite3; conn = sqlite3.connect\\('yuejiao.db'\\); cursor = conn.execute\\('SELECT id, username, user_type FROM sys_user WHERE delete_flag=0'\\); rows = cursor.fetchall\\(\\); print\\(rows if rows else 'NO USERS FOUND'\\); conn.close\\(\\)\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/login -H \"Content-Type: application/json\" -d \"{\\\\\"username\\\\\":\\\\\"admin\\\\\",\\\\\"password\\\\\":\\\\\"admin123\\\\\"}\")",
+      "Bash(curl -s -X POST http://localhost:8000/api/login -H \"Content-Type: application/json\" -d \"{\\\\\"username\\\\\":\\\\\"admin\\\\\",\\\\\"password\\\\\":\\\\\"wrong\\\\\"}\")"
     ]
   }
 }

@@ -29,7 +29,7 @@ SYSTEM_PROMPT = """你是"粤教服务"的学生智能助手"小粤"，为在册
 
 INTENT_DESCRIPTIONS = {
     "admin_service": "请假申请/审批状态查询/考务相关",
-    "psych_care": "表达情绪/倾诉压力/感到焦虑孤独/想家",
+    "psych_care": "表达负面情绪/倾诉心理压力/感到焦虑孤独想家/失眠睡不好/不想与人交流/状态不好/伤心难过/自伤自杀念头",
     "feedback": "投诉/建议/对服务不满/反馈问题",
     "academic_query": "查询考试时间/论文截止日/作业DDL",
     "progress_track": "查询留学申请进度/文书审核/签证状态",
@@ -52,9 +52,11 @@ PSYCH_MONITOR_PROMPT = """你是留学生的心理健康关怀助手。分析学
 - 被欺凌/暴力描述
 
 中危信号（risk_level=medium）：
-- 持续焦虑/失眠描述
-- 明显孤独感/社交回避
-- 学业崩溃感（"肯定要挂科""学不下去了"）
+- 持续焦虑/失眠/睡不好描述
+- 明显孤独感/社交回避/不想与人交流
+- 学业压力大/作业写不完/怕挂科/跟不上
+- 情绪低落/持续伤心/状态不好/不知道怎么办
+- 想家/想哭/烦躁/无助
 
 学生消息：{user_input}
 
@@ -123,7 +125,7 @@ NL2SQL_STUDENT_PROMPT = """你是一个安全的NL2SQL转换器。将学生用�
 
 ## 安全规则
 1. 只能生成 SELECT 语句，禁止 INSERT/UPDATE/DELETE/DROP 等任何修改操作
-2. 查询会自动限制为当前学生本人数据（WHERE student_id = 当前学生ID）
+2. 绝对不要生成 student_id 条件（系统会自动注入），不要写 student_id = ? 或 student_id = 数字
 3. SELECT查询必须包含 WHERE delete_flag = 0（如果该表有此字段）
 4. 对字符串使用 LIKE '%关键词%' 做模糊匹配
 5. LIMIT 不超过 100

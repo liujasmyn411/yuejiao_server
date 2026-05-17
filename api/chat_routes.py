@@ -72,6 +72,39 @@ def _local_classify(message: str) -> str:
     return best if biz[best] > 0 else "chitchat"
 
 
+TOPIC_SWITCH_CHECK_PROMPT = """你是一个对话状态判断助手。用户当前有一个待处理的事项，需要判断用户的新消息是「补充当前事项的信息」还是「想切换到新话题」。
+
+当前事项类型: {intent}
+已收集信息: {collected}
+当前阶段: {phase}
+
+用户新消息: {message}
+
+请判断用户意图，只回复一个词：
+- "supplementary" —— 用户在补充/修改当前事项的信息
+- "new_topic" —— 用户想切换话题，问别的事情
+
+注意：如果用户的消息明显是查询类（如查成绩、查进度、查信息、看数据等），应该判为 new_topic。"""
+
+
+def _llm_check_topic_switch(llm, message: str, state) -> bool:
+    """用 LLM 判断用户是否想切换话题（第二层逃生）。
+    返回 True 表示是新话题，应清除状态重新路由。"""
+    try:
+        prompt = TOPIC_SWITCH_CHECK_PROMPT.format(
+            intent=state.intent,
+            collected=state.summary(),
+            phase=state.phase,
+            message=message,
+        )
+        result = llm.chat(prompt, message)
+        if result and "new_topic" in result.lower():
+            return True
+        return False
+    except Exception:
+        return False
+
+
 @router.post("/api/chat")
 def chat(req: ChatRequest, db: Session = Depends(get_db),
          current_user = Depends(get_optional_user)):
@@ -99,27 +132,36 @@ def chat(req: ChatRequest, db: Session = Depends(get_db),
             output = agent.route_intent(req.message, student_id=req.student_id, db=db)
             output["agent"] = "customer"
             return output
-        # 有权访问 → 继续收集
-        agent_type = active_state.agent_type
-        if agent_type == "student":
-            agent = StudentAgent()
-            output = agent.continue_data_collection(
-                message, active_state, student_id=req.student_id, db=db
-            )
-            output["agent"] = "student"
-        elif agent_type == "enterprise":
-            agent = EnterpriseAgent()
-            output = agent.continue_data_collection(
-                message, active_state, user_id=req.user_id, db=db
-            )
-            output["agent"] = "enterprise"
+
+        # 第二层逃生：LLM 意图复核 —— 判断新输入是「补充信息」还是「另起话题」
+        is_new_topic = _llm_check_topic_switch(llm, message, active_state)
+        if is_new_topic:
+            stm.clear(student_id=req.student_id, user_id=req.user_id,
+                       session_id=req.session_id)
+            # 状态已清除，agent_type 仍为 None，fall-through 到步骤1走正常路由
+
         else:
-            agent = CustomerServiceAgent()
-            output = agent.continue_data_collection(
-                message, active_state, student_id=req.student_id, db=db
-            )
-            output["agent"] = "customer"
-        return output
+            # 有权访问 → 继续收集
+            agent_type = active_state.agent_type
+            if agent_type == "student":
+                agent = StudentAgent()
+                output = agent.continue_data_collection(
+                    message, active_state, student_id=req.student_id, db=db
+                )
+                output["agent"] = "student"
+            elif agent_type == "enterprise":
+                agent = EnterpriseAgent()
+                output = agent.continue_data_collection(
+                    message, active_state, user_id=req.user_id, db=db
+                )
+                output["agent"] = "enterprise"
+            else:
+                agent = CustomerServiceAgent()
+                output = agent.continue_data_collection(
+                    message, active_state, student_id=req.student_id, db=db
+                )
+                output["agent"] = "customer"
+            return output
 
     # 1. 优先用 LLM 做意图分类
     agent_type = None

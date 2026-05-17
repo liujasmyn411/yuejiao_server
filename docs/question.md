@@ -528,3 +528,314 @@ LLM 无状态独立分类，两条相同输入分别命中 `report_query` 和 `a
 | `agents/student/agent.py` | 新增 _handle_data_query（受限 NL2SQL + student_scope） |
 | `api/chat_routes.py` | 角色门回退修正 + TOP_LEVEL_INTENTS 优化 + ENTERPRISE_KW/STUDENT_KW 扩展 + 传递 user_id |
 | `tests/test_frontend.py` | NL2SQL 页面测试改为对话浮窗测试 |
+
+
+---
+
+# 第五部分：2026-05-17 功能开发 — 7 项需求实现
+
+## 26. 学生反馈后管理员收不到通知
+
+**问题**：学生提交反馈（`POST /api/student/feedback`）后只创建工单，管理员和班主任的通知中心无任何提示，只能手动去反馈工单列表查看。
+
+**根因**：`create_feedback` 只调了 `FeedbackCRUD.create`，没有创建 Notification。通知仅在反馈**被处理**时才创建（`resolve_feedback` → `feedback_resolved`）。
+
+**修复**（`api/student_routes.py`）：
+
+- 创建反馈后查询所有 `ADMIN` 用户 + 该学生的 `head_teacher_id`
+- 为每个管理员/班主任发送 `new_feedback` 通知（标题"新反馈工单"，含学生姓名、反馈类型、内容摘要、紧急程度）
+- 同时给提交反馈的学生发确认通知（`feedback_submitted`）
+
+**关键改动**：
+
+```python
+# 给管理员和班主任发送通知
+recipients = set()
+admins = db.query(SysUser).filter(SysUser.user_type == "ADMIN", SysUser.delete_flag == 0).all()
+for admin in admins:
+    recipients.add(admin.id)
+if student.head_teacher_id:
+    recipients.add(student.head_teacher_id)
+
+for recipient_id in recipients:
+    NotificationCRUD.create(db, recipient_id=recipient_id, title="新反馈工单",
+        content=f"学生 {student.real_name} 提交了{req.feedback_type}...",
+        notification_type="new_feedback", related_id=ticket.id)
+```
+
+---
+
+## 27. 管理员无法修改留学进度 + 员工通讯录
+
+**问题**：
+- 留学进度只有 GET 查询接口，管理员无法在系统中修改学生的留学阶段状态
+- 员工通讯录只有 GET 查询接口，无法更新员工联系方式/部门/角色
+
+**修复（后端）**：
+
+| 新增端点 | 方法 | 说明 |
+|---------|------|------|
+| `/api/student/study-abroad/{id}` | PUT | 修改留学进度（仅 EMPLOYEE/ADMIN） |
+| `/api/enterprise/employee/{id}` | PUT | 修改员工信息（仅 EMPLOYEE/ADMIN） |
+
+**CRUD 层新增**：
+- `StudyAbroadCRUD.update()`：更新留学进度，设 `is_current=1` 时自动清除同学生其他记录的 `is_current`
+- `EmployeeCRUD.update()`：更新员工非 None 字段
+
+**前端**：
+- `studyAbroad.js`：每个阶段卡片增加"✏️ 编辑"按钮，模态框编辑阶段/状态/负责人/日期
+- `employees.js`：每行增加"✏️ 编辑"按钮，模态框编辑姓名/角色/部门/电话/邮箱
+
+---
+
+## 28. 课程项目无添加/删除功能
+
+**问题**：课程项目页面只能查看，没有添加和删除入口。
+
+**修复（后端）**：
+
+| 新增端点 | 方法 | 权限 | 说明 |
+|---------|------|------|------|
+| `/api/enterprise/project` | POST | EMPLOYEE/ADMIN | 添加课程项目 |
+| `/api/enterprise/project/{id}` | DELETE | 仅 ADMIN | 软删除（`delete_flag=1`） |
+
+**CRUD 层新增**：`ProjectCRUD.delete()`
+
+**前端**（`projects.js`）：
+- 页头增加"+ 添加项目"按钮（EMPLOYEE/ADMIN 可见），弹出表单模态框
+- 每个项目卡片右上角增加"🗑️ 删除"按钮（仅 ADMIN 可见），二次确认后删除
+
+---
+
+## 29. 文件解析 → 客户意向研判 + 自动录入 CRM
+
+**问题**：原来的文件解析只提取画像字段（姓名/年龄/学历等），不做意向研判，不录入 CRM。上传文件后还要人工判断是否为意向客户。
+
+**修复**：
+
+**核心函数** `assess_lead_intention()`（`utils/file_parser.py`，需求 29 & 32 共用）：
+
+- 根据 `knowledge_base/data/用户研判规则/用户画像研判规则.md` 实现双项目评分：
+  - **新加坡国际本硕升学计划**：年龄 14-19、初中/高中/中职学历、家庭经济
+  - **中德精英人才共建计划**：年龄 18-35、高中及以上学历、语言能力、家庭经济
+- 评分维度：年龄匹配（25-30分）、学历匹配（20-25分）、意向国家（15分）、家庭经济（10分）、语言能力（5-15分）、留学意愿（15分）
+- 总分 ≥50 → 判定为意向客户，返回 `lead_data` 供写入 CRM
+- 总分 <50 → 非意向客户，返回原因分析
+
+**文件解析端点改造**（`POST /api/customer/parse-file`）：
+```
+上传文件 → 解析文本 → 提取画像 → assess_lead_intention() → 意向客户? → 自动写入 crm_lead
+```
+
+**前端**（`parseFile.js`）：展示研判结果卡片（绿色=意向客户 / 红色=非意向），显示评分、匹配项目、研判依据、是否已录入 CRM
+
+---
+
+## 30. 学生成绩批量上传
+
+**问题**：成绩只能逐条录入，无法批量导入。
+
+**修复（后端）**：
+
+| 新增端点 | 方法 | 说明 |
+|---------|------|------|
+| `/api/enterprise/score/batch` | POST | 上传 Excel/CSV，批量导入成绩 |
+
+**新增函数**：
+- `parse_score_file()`（`utils/file_parser.py`）：解析 Excel/CSV → 结构化成绩列表，支持中英文列名映射，校验必填字段
+- `ScoreCRUD.batch_create()`（`crud/enterprise_crud.py`）：逐条校验学生存在性 → 检查重复（相同学期+课程+考试类型）→ 批量插入 → 返回成功/失败统计
+
+**前端**（`scores.js`）：页头增加"📤 批量导入"按钮，上传后弹窗展示成功/失败统计和失败行详情
+
+---
+
+## 31. 员工离职处理（暂缓）
+
+**决定**：此需求暂时不实现，后续再议。
+
+规划中的方案（待后续启用）：
+- `PUT /api/enterprise/employee/{id}/resign` — 设置 `status="离职"` + `delete_flag=1`
+- CRM 客户交接：名下 `crm_lead` 的 `owner_employee_id` 重新分配
+- 班主任交接：名下学生的 `head_teacher_id` 重新分配
+
+---
+
+## 32. AI 对话浮窗中自然语言研判意向客户
+
+**问题**：管理员/员工在 AI 对话浮窗中用自然语言描述客户信息（如"客户名刘帅 家庭经济良好 学历本科"），需要能自动研判并录入 CRM。
+
+**修复**：
+
+**EnterpriseAgent 增强**：
+- `_handle_lead_profile` 改为调用统一的 `assess_lead_intention()`（与需求 29 共用规则）
+- `_quick_route` 新增 `lead_profile` 快速触发关键词（"画像""研判""意向客户""是不是意向""评估一下" 等）
+
+**chat_routes.py 关键词增强**：
+- `ENTERPRISE_KW` 新增 `'是不是意向', '评估一下', '分析一下', '匹配项目', '意向客户'`
+
+**流程**：
+```
+用户在浮窗输入"刘帅 本科 家庭良好 是否为意向客户"
+  → /api/chat → LLM 分类 enterprise → EnterpriseAgent
+  → _quick_route 匹配 lead_profile → _handle_lead_profile
+  → _extract_profile (LLM) 提取结构化字段
+  → assess_lead_intention() 评分
+  → ≥50分：标注"✅ 意向客户" → 自动写入 crm_lead → 返回结果
+  → <50分：标注"❌ 暂不符合" → 展示原因 → 不写入
+```
+
+---
+
+# 第六部分：Bug 修复 — 对话研判未写入 CRM + 缺年龄评分过低
+
+## 33. 对话研判识别为意向客户但未写入 crm_lead
+
+**问题**：员工输入"客户名刘帅 家庭经济情况良好 学历本科 留学意念强烈 是否为公司的意向用户"，AI 正确回答"该用户为意向用户"，但 `crm_lead` 表中没有该客户记录。
+
+**根因（两个）**：
+
+**Bug 1 — 事务未提交**：[agent.py:351](agents/enterprise/agent.py#L351) `_handle_lead_profile` 中 CRM 写入用的是 `db.flush()`（只将会话刷到数据库连接但不提交事务）。`/api/chat` 路由调用 Agent 后也没有 `db.commit()`。请求结束事务回滚，数据丢失。
+
+**Bug 2 — 缺年龄时评分过低**：用户没提供年龄（如只说"学历本科"），`assess_lead_intention()` 中年龄是核心评分项——新加坡项目需 14-19 岁（30分）、德国项目需 18-35 岁（25分）。缺年龄时全部年龄分丢失，其他维度（学历20+经济10）总分最高30-35，远不到50分阈值。函数返回 `is_intended: False`，不写 CRM。
+
+**修复**：
+
+**Bug 1**：`db.flush()` → `db.commit()`
+
+**Bug 2**：`assess_lead_intention()` 新增学历推断年龄逻辑：
+- **大专/本科/硕士/博士** → 推断 ≥18 岁（德国项目范围）→ +15 分年龄推断分 + `de_age_match=True`
+- **高中/职高/中专/中技** → 推断 16-19 岁（新加坡项目范围）→ +15 分年龄推断分 + `sg_age_match=True`
+
+修复后的评分（刘帅案例：本科 + 良好经济，缺年龄）：
+| 维度 | 得分 |
+|------|------|
+| 学历匹配德国项目（本科 ≥ 高中） | +20 |
+| 学历推断年龄范围（本科 → 18+） | +15 |
+| 家庭经济支持（良好） | +10 |
+| 基本条件满足德国项目意愿加分 | +15 |
+| **总分** | **60 ≥ 50 ✅** |
+
+修复后正确判定为意向客户并写入 `crm_lead`。
+
+---
+
+# 涉及文件汇总（本次会话新增/修改）
+
+## 后端
+| 文件 | 改动类型 |
+|---|---|
+| `api/student_routes.py` | 反馈通知 + 留学进度 PUT 端点 |
+| `api/enterprise_routes.py` | 员工 PUT + 项目 POST/DELETE + 成绩批量 POST |
+| `api/customer_routes.py` | 文件解析改造：研判 + 自动录入 CRM |
+| `api/chat_routes.py` | ENTERPRISE_KW 关键词增强 |
+| `crud/student_crud.py` | StudyAbroadCRUD.update()（含 is_current 互斥） |
+| `crud/enterprise_crud.py` | EmployeeCRUD.update() + ScoreCRUD.batch_create() |
+| `crud/customer_crud.py` | ProjectCRUD.delete() |
+| `schemas/schemas.py` | StudyAbroadUpdateRequest / EmployeeUpdateRequest / ProjectCreateRequest / ScoreBatchItem |
+| `schemas/__init__.py` | 导出新 Schema |
+| `utils/file_parser.py` | assess_lead_intention()（统一研判）+ parse_score_file() + 学历推断年龄 |
+| `agents/enterprise/agent.py` | _handle_lead_profile 改用统一研判 + db.flush→commit + _quick_route 增 lead_profile 关键词 |
+
+## 前端
+| 文件 | 改动类型 |
+|---|---|
+| `static/js/pages/studyAbroad.js` | 新增编辑按钮 + 模态框 |
+| `static/js/pages/employees.js` | 新增编辑按钮 + 模态框 |
+| `static/js/pages/projects.js` | 新增添加/删除按钮 + 模态框 |
+| `static/js/pages/parseFile.js` | 新增研判结果卡片展示 |
+| `static/js/pages/scores.js` | 新增批量导入按钮 |
+
+---
+
+# 第七部分：2026-05-17 — 槽位填充死循环 + NL2SQL 占位符 + 错误信息泄露
+
+## 34. 槽位填充死循环——用户一旦进入投诉流程就逃不出来
+
+**问题**：学生提问"查个人信息"→ AI 返回 NL2SQL 错误 → 学生测试提交投诉 → 之后无论输入什么（查成绩、查进度等），AI 始终回复"好的，已更新信息。请确认以下内容：• 学生ID: 7 • 投诉/反馈内容: 查询投诉进度"，永远跳不出投诉确认循环。
+
+**根因（4 个叠加）**：
+
+1. **触发门槛过低**：`_handle_feedback` 的 `STRONG_COMPLAINT_KW` 包含 `"投诉"`，用户输入"查询投诉进度"被判定为"真投诉内容"，整句话当成投诉内容存入，直接进入 `confirming` 阶段。
+
+2. **"收集阶段"无话题切换检测**：`continue_data_collection` 的"收集阶段"(collecting) 没有 `SWITCH_TOPIC_KW` 检查，所有用户输入都被当成槽位数据吸收。
+
+3. **`SWITCH_TOPIC_KW` 覆盖不足**：只有 14 个关键词，常见查询如"我的分数是多少""帮我看看我的信息""最近有什么通知"等全部不匹配。
+
+4. **确认阶段条件 C 死循环**：`continue_data_collection` 确认阶段中，用户输入未命中取消/确认/短输入/话题切换任何一条时走到条件 C——切到 collecting → `_merge_collected` 但 `missing=[]` 无字段可更新 → `is_complete()=True` 立即切回 confirming → 返回相同确认提示 → 用户再输入 → 重复。**无限循环**。
+
+**修复——4 层逃生机制**：
+
+| 层 | 机制 | 触发条件 | 延迟 |
+|---|---|---|---|
+| 1 | 关键词匹配（34 词） | 收集/确认阶段命中 SWITCH_TOPIC_KW | 0 |
+| 2 | LLM 意图复核 | `chat_routes.py` 有活跃状态时先用 LLM 判断"补充信息"还是"新话题" | ~500ms |
+| 3 | 交互计数兜底 | `SlotState.interaction_count` 超过 5 轮未确认自动清状态 | 到第 6 轮触发 |
+| 4 | 查询/投诉区分 | `_handle_feedback` 检测到"查询投诉进度"等查询关键词→查 DB 返工单列表，不建新工单 | 0 |
+
+**修改文件**：
+| 文件 | 改动 |
+|---|---|
+| `utils/conversation_state.py` | `SWITCH_TOPIC_KW` 14→34 词；`SlotState` 新增 `interaction_count` + `MAX_INTERACTIONS=5`；`ConversationStateManager` 新增 `_sweep_expired()` 防内存泄漏 |
+| `api/chat_routes.py` | 新增 `TOPIC_SWITCH_CHECK_PROMPT` + `_llm_check_topic_switch()`，活跃状态时先 LLM 复核再决定继续填充还是清状态重路由 |
+| `agents/student/agent.py` | `continue_data_collection`：收集阶段新增话题切换检测 + 交互计数兜底；确认阶段条件 C 拆分——`is_complete()` 直接清状态不循环；`_handle_feedback` 新增查询投诉关键词→直接查 DB 返回工单 |
+| `agents/customer_service/agent.py` | `continue_data_collection` 同步上述 4 层；`_handle_feedback` 同步查询投诉检测 |
+| `agents/enterprise/agent.py` | `continue_data_collection` 同步交互计数 + 收集阶段话题切换 + 条件 C 拆分 |
+
+---
+
+## 35. "查看我的请假记录"→ SQL 占位符 `?` 语法错误
+
+**问题**：学生输入"查看我的请假记录"，AI 返回：
+```
+SQL执行失败: (pymysql.err.ProgrammingError) ... near '? AND delete_flag = 0 ...'
+[SQL: SELECT ... FROM student_admin_service WHERE student_id = ? AND delete_flag = 0 ...]
+```
+
+**根因**：[nl2sql.py:212](agents/enterprise/nl2sql.py#L212) 的 `_apply_student_scope` 方法一行代码：
+
+```python
+has_student_table = any(t in upper for t in student_tables)
+```
+
+`student_tables` 表名全是**小写**（`"student_admin_service"`），`upper = sql.upper()` 把 SQL 全转**大写**（`"STUDENT_ADMIN_SERVICE"`），Python `in` 区分大小写，`has_student_table` 始终为 `False`，整个 student_id 注入逻辑被跳过。LLM 生成的 `?` 占位符原封不动到 MySQL，`?` 在 MySQL 中不是合法占位符（应用 `%s`），SQL 执行报错。
+
+**修复**：一行改动 — `t in upper` → `t.upper() in upper`
+
+**修改文件**：`agents/enterprise/nl2sql.py` 第 212 行
+
+---
+
+## 36. SQL 错误信息直接暴露给用户
+
+**问题**：NL2SQL 查询失败时，`ProgrammingError`、`pymysql`、原始 SQL 语句全部展示给学生。既不友好也暴露数据库结构。
+
+**根因**：错误从底层层层透传未包装：
+- `nl2sql.execute()` → `f"SQL执行失败: {e}"`
+- `nl2sql.query()` → `return {"error": str(e), "sql": sql}`（SQL 一并返回）
+- `_handle_data_query()` → `f"查询失败: {result['error']}..."` 直接展示
+- 成功路径也展示 `执行SQL: \`{sql}\`` 原始 SQL
+
+**修复**：
+- `student/agent.py` 和 `enterprise/agent.py` 所有 NL2SQL 调用处：错误走 `logging.error` 记录详情（含 SQL），用户只看到"查询失败，请尝试更具体的描述…"
+- 成功路径去掉原始 SQL 展示，只返回解释和结果数据
+
+**修改文件**：
+| 文件 | 改动 |
+|---|---|
+| `agents/student/agent.py:_handle_data_query` | 错误→日志 + 友好提示；成功→去 SQL 展示 |
+| `agents/enterprise/agent.py:_handle_lead_query` | 同上 |
+| `agents/enterprise/agent.py:_handle_data_query` | 同上 |
+
+---
+
+# 涉及文件汇总（本次会话新增/修改）
+
+## 后端
+| 文件 | 改动类型 |
+|---|---|
+| `utils/conversation_state.py` | SWITCH_TOPIC_KW 扩充 + interaction_count + MAX_INTERACTIONS + _sweep_expired |
+| `api/chat_routes.py` | 新增 LLM 意图复核（第二层逃生） |
+| `agents/student/agent.py` | 4层逃生 + 查询投诉检测 + 错误信息脱敏 |
+| `agents/customer_service/agent.py` | 4层逃生 + 查询投诉检测 |
+| `agents/enterprise/agent.py` | 4层逃生 + 错误信息脱敏 |
+| `agents/enterprise/nl2sql.py` | _apply_student_scope 大小写修复 |

@@ -68,6 +68,8 @@ class StudentAgent:
         output = {"intent": intent, "response": response, "confidence": result.get("confidence", 0.5)}
         if psych_eval and self.psych.should_alert(psych_eval):
             output["psych_alert"] = psych_eval
+            if student_id and db:
+                self._record_alert(student_id, psych_eval, db)
         return output
 
     # ==================== 意图处理器 ====================
@@ -242,6 +244,31 @@ class StudentAgent:
             # 但如果走到这里说明路由没生效，直接返回提示
             return "你有一个待确认的反馈工单，请先处理（回复「确认」或「取消」）~"
 
+        # 第四层：区分「查询投诉进度/记录」和「发起新投诉」
+        QUERY_COMPLAINT_KW = [
+            "查询投诉", "投诉进度", "投诉状态", "投诉处理", "投诉记录",
+            "工单进度", "工单状态", "我的投诉", "我的反馈",
+            "反馈进度", "反馈状态", "反馈记录",
+        ]
+        if any(kw in user_input for kw in QUERY_COMPLAINT_KW):
+            if db and student_id:
+                try:
+                    from crud import FeedbackCRUD
+                    tickets = FeedbackCRUD.get_all(db, student_id=student_id)
+                    if not tickets:
+                        return "你目前没有提交过投诉或反馈工单。"
+                    lines = ["📋 你的投诉/反馈记录："]
+                    for t in tickets:
+                        status_icon = {"待处理": "⏳", "已处理": "✅"}.get(t.status, "")
+                        lines.append(
+                            f"  {status_icon} [#{t.id}] {t.content[:40]}\n"
+                            f"     类型: {t.feedback_type or '投诉'} | 状态: {t.status}"
+                        )
+                    return "\n".join(lines)
+                except Exception as e:
+                    return f"查询投诉记录失败: {e}"
+            return "未能查询投诉记录，请确认已登录后重试。"
+
         # 1. 从用户输入提取已提供的信息
         info = self.llm.extract_info(
             user_input,
@@ -312,6 +339,20 @@ class StudentAgent:
                                  student_id: int = None, db=None) -> dict:
         """通用槽位填充 —— 支持取消 + 确认 + 重新编辑 + 查询"""
         stm = get_conversation_state_manager()
+
+        # ===== 第三层逃生：交互次数兜底 =====
+        state.interaction_count += 1
+        if state.interaction_count > SlotState.MAX_INTERACTIONS:
+            stm.clear(student_id=student_id)
+            return {
+                "intent": "chitchat",
+                "response": (
+                    f"对话轮次较多，已自动结束之前的"
+                    f"{'投诉工单' if state.intent == 'feedback' else '申请'}。"
+                    f"请问还有什么可以帮你的？"
+                ),
+                "confidence": 0.8,
+            }
 
         # ===== 查询类意图（无需插入，只查数据） =====
         if state.intent == "admin_query":
@@ -420,8 +461,19 @@ class StudentAgent:
                     "confidence": 0.85,
                 }
 
-            # 条件C：正常情况 → 当成补充信息
-            state.confirm_retries = 0  # 确实在补充内容，重置计数
+            # 条件C：状态已完整 → 用户输入不是补充，是另起话题
+            # 条件D：状态不完整 → 当成补充信息
+            if state.is_complete():
+                # 已无缺失字段，用户输入不是补充 → 自动清状态
+                stm.clear(student_id=student_id)
+                return {
+                    "intent": "chitchat",
+                    "response": (
+                        f"好的，已取消当前操作。请重新描述你的需求，我来帮你处理~"
+                    ),
+                    "confidence": 0.85,
+                }
+            state.confirm_retries = 0
             state.phase = "collecting"
             info = self._extract_for_intent(user_input, state.intent)
             self._merge_collected(state, info, user_input)
@@ -444,6 +496,18 @@ class StudentAgent:
             }
 
         # ===== 收集阶段 =====
+        # 第一层逃生：话题切换关键词检测
+        stripped = user_input.strip()
+        if any(kw in stripped for kw in SlotState.SWITCH_TOPIC_KW):
+            stm.clear(student_id=student_id)
+            return {
+                "intent": "chitchat",
+                "response": (
+                    f"好的，已取消当前操作。请重新描述你的需求，我来帮你处理~"
+                ),
+                "confidence": 0.85,
+            }
+
         info = self._extract_for_intent(user_input, state.intent)
         self._merge_collected(state, info, user_input)
 
@@ -756,15 +820,26 @@ class StudentAgent:
         try:
             result = self.nl2sql.query(db, user_input, student_scope=student_id)
             if "error" in result:
-                return f"查询失败: {result['error']}\n请尝试更具体的描述，如'查询我的成绩'或'我的请假记录'。"
+                import logging
+                logging.getLogger(__name__).error(
+                    "NL2SQL查询失败 | 用户输入: %s | 错误: %s | SQL: %s",
+                    user_input, result["error"], result.get("sql", "")
+                )
+                return (
+                    "抱歉，查询未能成功。可能是问题描述不够具体，请尝试：\n"
+                    "  • '查询我的成绩'\n"
+                    "  • '我的请假记录'\n"
+                    "  • '我的教务DDL'\n"
+                    "  • '我的留学进度'\n"
+                    "  • '我提交的投诉/反馈'"
+                )
 
             data = result.get("data", [])
-            sql = result.get("sql", "")
             explanation = result.get("explanation", "")
 
-            lines = [f"{explanation}\n执行SQL: `{sql}`\n"]
+            lines = [explanation] if explanation else ["查询结果："]
             if not data:
-                lines.append("查询结果为空。")
+                lines.append("查询结果为空，可能没有相关记录。")
             else:
                 lines.append(f"共 {len(data)} 条记录：")
                 for i, row in enumerate(data[:15], 1):
@@ -774,7 +849,11 @@ class StudentAgent:
                     lines.append(f"  ... 还有 {len(data) - 15} 条")
             return "\n".join(lines)
         except Exception as e:
-            return f"查询出错: {e}"
+            import logging
+            logging.getLogger(__name__).error(
+                "NL2SQL查询异常 | 用户输入: %s | 异常: %s", user_input, str(e)
+            )
+            return "查询时遇到问题，请换个方式描述你的需求，或稍后再试。"
 
     def _handle_chitchat(self, user_input: str, entities: dict,
                          student_id: int, db) -> str:
@@ -809,7 +888,9 @@ class StudentAgent:
         if not db:
             return
         try:
-            from model import StudentPsychAlert
+            from datetime import datetime
+            from model import StudentPsychAlert, StudentPsychProfile
+
             alert = StudentPsychAlert(
                 student_id=student_id,
                 trigger_reason=evaluation.get("trigger_reason", "情绪评估触发"),
@@ -818,8 +899,7 @@ class StudentAgent:
                 status="未处理",
             )
             db.add(alert)
-            # 更新心理画像
-            from model import StudentPsychProfile
+
             profile = db.query(StudentPsychProfile).filter(
                 StudentPsychProfile.student_id == student_id
             ).first()
@@ -827,10 +907,23 @@ class StudentAgent:
                 profile.latest_emotion_tag = evaluation.get("emotion_tag", "")
                 profile.emotion_score = evaluation.get("emotion_score", 50)
                 profile.risk_level = evaluation.get("risk_level", "none")
-                profile.last_interaction_time = __import__("datetime").datetime.now()
-            db.flush()
-        except Exception:
-            pass
+                profile.total_risk_count = (profile.total_risk_count or 0) + 1
+                profile.last_interaction_time = datetime.now()
+            else:
+                profile = StudentPsychProfile(
+                    student_id=student_id,
+                    latest_emotion_tag=evaluation.get("emotion_tag", ""),
+                    emotion_score=evaluation.get("emotion_score", 50),
+                    risk_level=evaluation.get("risk_level", "none"),
+                    total_risk_count=1,
+                    last_interaction_time=datetime.now(),
+                )
+                db.add(profile)
+
+            db.commit()
+        except Exception as e:
+            import logging
+            logging.getLogger("yuejiao.student_agent").error(f"心理预警记录失败 (student_id={student_id}): {e}")
 
     def _record_upgrade_lead(self, student_id: int, info: dict, db) -> None:
         """记录增值转化线索到CRM"""

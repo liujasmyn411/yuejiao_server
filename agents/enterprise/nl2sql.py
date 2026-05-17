@@ -202,32 +202,48 @@ class NL2SQL:
     def _apply_student_scope(self, sql: str, student_id: int) -> str:
         """
         在 SELECT 语句中注入 student_id 条件，确保学生只能查自己的数据。
-        支持：已有 WHERE → 追加 AND；无 WHERE → 插入 WHERE。
+        优先替换已有的 student_id = ? / student_id = N，否则追加 AND。
         """
         import re
-        # 只对包含学生相关表的查询做限制
         student_tables = {"student_score", "student_admin_service",
                           "student_feedback_ticket", "student_academic",
                           "student_study_abroad_progress"}
         upper = sql.upper()
-        has_student_table = any(t in upper for t in student_tables)
+        has_student_table = any(t.upper() in upper for t in student_tables)
         if not has_student_table:
-            return sql  # 不涉及学生表，不加限制
+            return sql
 
         scope_clause = f"student_id = {int(student_id)}"
-        # 尝试在 WHERE 后追加
+
+        # 先移除 LLM 可能生成的占位符 student_id = ?
+        sql = re.sub(r'\bstudent_id\s*=\s*\?\s*', '', sql, flags=re.IGNORECASE)
+        # 移除 LLM 可能生成的硬编码 student_id = 数字
+        sql = re.sub(r'\bstudent_id\s*=\s*\d+\s*', '', sql, flags=re.IGNORECASE)
+        # 清理可能留下的多余 AND/WHERE 关键字
+        sql = re.sub(r'\bWHERE\s+AND\b', 'WHERE', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bAND\s+AND\b', 'AND', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\bWHERE\s*$', '', sql, flags=re.IGNORECASE)
+        sql = re.sub(r'\s{2,}', ' ', sql)
+
+        # 在 WHERE 后追加
         where_match = re.search(r'\bWHERE\b\s+', sql, re.IGNORECASE)
         if where_match:
             pos = where_match.end()
-            # 找 WHERE 子句的结束位置（GROUP BY / ORDER BY / LIMIT / 语句末尾）
             end_match = re.search(r'\b(GROUP\s+BY|ORDER\s+BY|LIMIT|HAVING)\b', sql[pos:], re.IGNORECASE)
             if end_match:
                 end_pos = pos + end_match.start()
-                sql = sql[:end_pos] + f"({sql[pos:end_pos].strip()}) AND {scope_clause} " + sql[end_pos:]
+                where_content = sql[pos:end_pos].strip()
+                if where_content:
+                    sql = sql[:end_pos] + f"({where_content}) AND {scope_clause} " + sql[end_pos:]
+                else:
+                    sql = sql[:pos] + scope_clause + " " + sql[end_pos:]
             else:
-                sql = sql[:pos] + f"({sql[pos:].strip()}) AND {scope_clause}"
+                where_content = sql[pos:].strip().rstrip(';').strip()
+                if where_content:
+                    sql = sql[:pos] + f"({where_content}) AND {scope_clause}"
+                else:
+                    sql = sql[:pos] + scope_clause
         else:
-            # 没有 WHERE 子句 → 在 ORDER BY / GROUP BY / LIMIT / 末尾之前插入
             end_match = re.search(r'\b(ORDER\s+BY|GROUP\s+BY|LIMIT|HAVING)\b', sql, re.IGNORECASE)
             if end_match:
                 sql = sql[:end_match.start()] + f" WHERE {scope_clause} " + sql[end_match.start():]

@@ -19,6 +19,7 @@ class SlotState:
     phase: str = "collecting"            # collecting → confirming → done
     confirmed: bool = False              # 用户已确认
     confirm_retries: int = 0             # 确认阶段循环次数（防死循环）
+    interaction_count: int = 0           # 总交互次数（防无限循环）
     created_at: float = field(default_factory=time.time)
 
     # 取消关键词
@@ -29,9 +30,17 @@ class SlotState:
     CONFIRM_KEYWORDS = ["确认", "是的", "对的", "没问题", "可以", "行", "好", "好的",
                         "嗯", "对", "是", "提交", "ok", "OK", "yes", "y"]
 
-    # 切换话题关键词 —— 用户明显想另起话题
-    SWITCH_TOPIC_KW = ["查询", "查看", "帮我查", "我想查", "成绩", "考试", "论文",
-                        "进度", "课程", "活动", "报名", "请假", "日报", "天气"]
+    # 切换话题关键词 —— 用户明显想另起话题（第一层逃生：快速关键词）
+    SWITCH_TOPIC_KW = [
+        "查询", "查看", "帮我查", "我想查", "帮我看看", "我想看", "看一下",
+        "成绩", "分数", "考试", "论文", "作业", "ddl", "截止",
+        "进度", "状态", "课程", "活动", "报名", "请假", "日报", "天气",
+        "通知", "消息", "信息", "记录", "历史", "我的",
+        "签证", "留学", "申请", "心理", "安排", "课表",
+    ]
+
+    # 最大交互次数 —— 超过后自动清状态（第三层逃生：计数兜底）
+    MAX_INTERACTIONS = 5
 
     def is_complete(self) -> bool:
         return len(self.missing) == 0
@@ -142,12 +151,23 @@ class ConversationStateManager:
     def get(self, student_id: int = None, user_id: int = None,
             session_id: str = None) -> Optional[SlotState]:
         """获取当前活跃的槽位填充状态，过期自动清除"""
+        self._sweep_expired()
         key = self._make_key(student_id, user_id, session_id)
         state = self._states.get(key)
         if state and time.time() - state.created_at > self._ttl:
             del self._states[key]
             return None
         return state
+
+    def _sweep_expired(self) -> None:
+        """清理所有已过期的状态，防止内存泄漏"""
+        now = time.time()
+        expired = [
+            k for k, v in self._states.items()
+            if now - v.created_at > self._ttl
+        ]
+        for k in expired:
+            del self._states[k]
 
     def start(self, intent: str, table_name: str, agent_type: str,
               student_id: int = None, user_id: int = None,

@@ -3,6 +3,8 @@
 支持 8 种意图识别与路由
 """
 import json
+import logging
+
 from agents.customer_service.prompts import (
     SYSTEM_PROMPT, INTENT_DESCRIPTIONS, CHITCHAT_PROMPT
 )
@@ -11,6 +13,9 @@ from utils.llm_client import get_llm_client
 from utils.conversation_state import (
     get_conversation_state_manager, SlotState
 )
+from crud.customer_crud import EventCRUD
+
+logger = logging.getLogger("yuejiao.customer_service")
 
 
 class CustomerServiceAgent:
@@ -100,14 +105,32 @@ class CustomerServiceAgent:
         return self.llm.chat(prompt, user_input)
 
     def _handle_event_registration(self, user_input: str, entities: dict, student_id: int = None, db=None) -> str:
-        """活动报名引导"""
-        return (
-            "我们定期会举办留学分享会和政策解读讲座哦~\n"
-            "你可以通过以下方式查看和报名活动：\n"
-            "1. 访问官网活动板块\n"
-            "2. 回复「活动」查看近期的活动列表\n"
-            "3. 直接告诉我你想参加什么类型的活动，我帮你查~"
-        )
+        """活动报名引导 —— 查询数据库返回真实活动列表"""
+        if db is None:
+            return "活动功能暂不可用，请稍后再试或联系客服~"
+
+        all_events = EventCRUD.get_all(db)
+        # 只展示未结束的活动（报名中 / 未开始 / 进行中）
+        events = [e for e in all_events if e.event_status not in ("已结束", "已取消")]
+        if not events:
+            return "目前暂无进行中的活动，请留意后续通知~\n你可以访问官网活动板块获取最新动态。"
+
+        lines = ["近期有以下活动可以报名哦~\n"]
+        for i, e in enumerate(events, 1):
+            event_type = e.event_type or "待定"
+            start_time = e.start_time.strftime("%m月%d日 %H:%M") if e.start_time else "待定"
+            location = e.location or "待定"
+            end_time = e.registration_end_time.strftime("%m月%d日 %H:%M") if e.registration_end_time else "待定"
+            current = e.current_participants or 0
+            total = e.max_participants or "不限"
+            lines.append(
+                f"{i}. 【{event_type}】{e.event_name}\n"
+                f"   时间：{start_time}\n"
+                f"   地点：{location}\n"
+                f"   报名截止：{end_time} | 已报名：{current}/{total}"
+            )
+        lines.append(f"\n共 {len(events)} 场活动，回复活动编号（如「1」）即可报名~")
+        return "\n".join(lines)
 
     def _handle_faq(self, user_input: str, entities: dict, student_id: int = None, db=None) -> str:
         """FAQ 检索"""
@@ -152,11 +175,38 @@ class CustomerServiceAgent:
                 return self._local_chitchat(user_input)
             return result
         except Exception:
+            logger.warning("LLM闲聊失败，使用本地fallback")
             return self._local_chitchat(user_input)
 
     def _handle_feedback(self, user_input: str, entities: dict, student_id: int = None, db=None) -> str:
         """售后反馈 —— 投诉/建议提交（槽位填充：收集所有必填字段后再写入）"""
         stm = get_conversation_state_manager()
+
+        # 第四层：区分「查询投诉进度/记录」和「发起新投诉」
+        QUERY_COMPLAINT_KW = [
+            "查询投诉", "投诉进度", "投诉状态", "投诉处理", "投诉记录",
+            "工单进度", "工单状态", "我的投诉", "我的反馈",
+            "反馈进度", "反馈状态", "反馈记录",
+        ]
+        if any(kw in user_input for kw in QUERY_COMPLAINT_KW):
+            if db and student_id:
+                try:
+                    from crud import FeedbackCRUD
+                    tickets = FeedbackCRUD.get_all(db, student_id=student_id)
+                    if not tickets:
+                        return "你目前没有提交过投诉或反馈工单。"
+                    lines = ["📋 你的投诉/反馈记录："]
+                    for t in tickets:
+                        status_icon = {"待处理": "⏳", "已处理": "✅"}.get(t.status, "")
+                        lines.append(
+                            f"  {status_icon} [#{t.id}] {t.content[:40]}\n"
+                            f"     类型: {t.feedback_type or '投诉'} | 状态: {t.status}"
+                        )
+                    return "\n".join(lines)
+                except Exception as e:
+                    logger.error("查询投诉记录失败 (student_id=%s): %s", student_id, e)
+                    return f"查询投诉记录失败: {e}"
+            return "未能查询投诉记录，请确认已登录后重试。"
 
         # 1. 从用户输入提取已提供的信息
         info = self.llm.extract_info(
@@ -211,15 +261,26 @@ class CustomerServiceAgent:
                 f"回复「确认」提交工单，回复「取消」放弃，或继续补充信息~"
             )
 
-        if not student_id:
-            return "请提供你的学生ID以创建工单。"
-
     # ==================== 槽位填充 ====================
 
     def continue_data_collection(self, user_input: str, state: SlotState,
                                  student_id: int = None, db=None) -> dict:
         """通用槽位填充 —— 支持取消 + 确认 + 重新编辑"""
         stm = get_conversation_state_manager()
+
+        # ===== 第三层逃生：交互次数兜底 =====
+        state.interaction_count += 1
+        if state.interaction_count > SlotState.MAX_INTERACTIONS:
+            stm.clear(student_id=student_id)
+            return {
+                "intent": "chitchat",
+                "response": (
+                    f"对话轮次较多，已自动结束之前的"
+                    f"{'投诉工单' if state.intent == 'feedback' else '申请'}。"
+                    f"请问还有什么可以帮你的？"
+                ),
+                "confidence": 0.8,
+            }
 
         # ===== 取消检测 =====
         if SlotState.is_cancel(user_input):
@@ -253,6 +314,7 @@ class CustomerServiceAgent:
                             "confidence": 0.95,
                         }
                     except Exception as e:
+                        logger.error("创建反馈工单失败 (student_id=%s): %s", student_id, e)
                         return {"intent": "feedback", "response": f"工单创建失败: {e}", "confidence": 0.9}
                 return {
                     "intent": "feedback",
@@ -261,8 +323,9 @@ class CustomerServiceAgent:
                 }
 
             stripped = user_input.strip()
-            # 短输入或切换话题 → 提供退出选项
-            if len(stripped) <= 5 or any(kw in stripped for kw in SlotState.SWITCH_TOPIC_KW):
+
+            # 条件A：短输入 → 可能是另起话题
+            if len(stripped) <= 5:
                 state.confirm_retries += 1
                 if state.confirm_retries >= 2:
                     stm.clear(student_id=student_id)
@@ -278,6 +341,24 @@ class CustomerServiceAgent:
                     "confidence": 0.85,
                 }
 
+            # 条件B：话题切换关键词
+            if any(kw in stripped for kw in SlotState.SWITCH_TOPIC_KW):
+                stm.clear(student_id=student_id)
+                return {
+                    "intent": "chitchat",
+                    "response": "好的，已取消当前操作。请重新描述你的需求，我来帮你处理~",
+                    "confidence": 0.85,
+                }
+
+            # 条件C：状态已完整 → 不是补充，是另起话题
+            # 条件D：状态不完整 → 当成补充信息
+            if state.is_complete():
+                stm.clear(student_id=student_id)
+                return {
+                    "intent": "chitchat",
+                    "response": "好的，已取消当前操作。请重新描述你的需求，我来帮你处理~",
+                    "confidence": 0.85,
+                }
             state.confirm_retries = 0
             state.phase = "collecting"
             info = self.llm.extract_info(
@@ -302,6 +383,16 @@ class CustomerServiceAgent:
             }
 
         # ===== 收集阶段 =====
+        # 第一层逃生：话题切换关键词检测
+        stripped = user_input.strip()
+        if any(kw in stripped for kw in SlotState.SWITCH_TOPIC_KW):
+            stm.clear(student_id=student_id)
+            return {
+                "intent": "chitchat",
+                "response": "好的，已取消当前操作。请重新描述你的需求，我来帮你处理~",
+                "confidence": 0.85,
+            }
+
         info = self.llm.extract_info(
             user_input, ["反馈类型", "涉及人员", "详细描述", "期望解决方案"]
         )

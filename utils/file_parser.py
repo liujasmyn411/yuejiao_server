@@ -216,18 +216,15 @@ def assess_lead_intention(profile: dict) -> dict:
     # ===== 新加坡项目评估 =====
     sg_reasons = []
     sg_age_match = False
-    if age:
-        # 初中毕业生 14-16 岁
+    if age and age > 0:
         if 14 <= age <= 16:
             sg_score += 30
             sg_reasons.append(f"年龄匹配新加坡项目：{age}岁（初中毕业生范围14-16岁）")
             sg_age_match = True
-        # 高中/中职 16-19 岁
         elif 16 <= age <= 19:
             sg_score += 30
             sg_reasons.append(f"年龄匹配新加坡项目：{age}岁（高中/中职毕业生范围16-19岁）")
             sg_age_match = True
-        # 大专就业班 17岁以上
         elif age >= 17 and ("职高" in education or "中专" in education or "中职" in education or "中技" in education):
             sg_score += 25
             sg_reasons.append(f"年龄匹配新加坡就业班：{age}岁（满17岁可报大专就业班）")
@@ -238,13 +235,17 @@ def assess_lead_intention(profile: dict) -> dict:
             sg_age_match = True
 
     if education:
-        edu_lower = education.lower()
         if any(kw in education for kw in ["初中"]):
             sg_score += 25
             sg_reasons.append(f"学历匹配：{education}（初中毕业可报2+2/2+2+1项目）")
         elif any(kw in education for kw in ["高中", "职高", "中专", "中职", "中技"]):
             sg_score += 25
             sg_reasons.append(f"学历匹配：{education}（可报0.5/1+2或就业班项目）")
+            # 高中学历可推断年龄 16-19，缺年龄时给予部分年龄分
+            if not age or age <= 0:
+                sg_score += 15
+                sg_reasons.append("学历推断年龄范围匹配新加坡项目（高中/中职通常16-19岁）")
+                sg_age_match = True
         elif any(kw in education for kw in ["大专", "专科"]):
             sg_score += 20
             sg_reasons.append(f"学历匹配：{education}（可报一年制专升本）")
@@ -272,7 +273,7 @@ def assess_lead_intention(profile: dict) -> dict:
     # ===== 德国项目评估 =====
     de_reasons = []
     de_age_match = False
-    if age:
+    if age and age > 0:
         if 18 <= age <= 35:
             de_score += 25
             de_reasons.append(f"年龄匹配德国项目：{age}岁（范围18-35岁）")
@@ -283,9 +284,19 @@ def assess_lead_intention(profile: dict) -> dict:
             de_reasons.append(f"年龄超出德国项目要求（上限35岁，当前{age}岁）")
 
     if education:
-        if any(kw in education for kw in ["高中", "职高", "中专", "大专", "本科", "硕士", "博士"]):
+        high_edu = any(kw in education for kw in ["大专", "专科", "本科", "硕士", "博士"])
+        mid_edu = any(kw in education for kw in ["高中", "职高", "中专", "中职", "中技"])
+        if high_edu or mid_edu:
             de_score += 20
             de_reasons.append(f"学历匹配德国项目：{education}（需高中及以上）")
+            # 大专/本科及以上可推断年龄 18+，缺年龄时给予部分年龄分
+            if high_edu and (not age or age <= 0):
+                de_score += 15
+                de_reasons.append("学历推断年龄范围匹配德国项目（大专/本科通常18岁以上）")
+                de_age_match = True
+            elif mid_edu and (not age or age <= 0):
+                de_score += 10
+                de_reasons.append("学历推断可能匹配德国项目（高中/中职需确认年龄≥18）")
         elif "初中" in education:
             de_reasons.append("学历不满足德国项目要求（需高中及以上）")
 
