@@ -44,7 +44,15 @@
       "Bash(python -m pytest tests/ -x -v)",
       "Bash(python -m pytest tests/test_chat.py tests/test_student.py tests/test_customer.py -v)",
       "Bash(python -m pytest tests/test_chat.py tests/test_student.py tests/test_customer.py tests/test_enterprise.py tests/test_report.py -v)",
-      "Bash(python -m pytest tests/test_frontend.py -v -k \"chat\")"
+      "Bash(python -m pytest tests/test_frontend.py -v -k \"chat\")",
+      "Bash(python -m pytest tests/test_customer.py -v)",
+      "Bash(python -m pytest tests/test_enterprise.py::TestNL2SQL tests/test_enterprise.py::TestNL2SQLUpdate -x -v)",
+      "Bash(python -m pytest tests/ -x --ignore=tests/test_frontend.py --ignore=tests/test_e2e.py -v)",
+      "Bash(python -m pytest tests/test_enterprise.py -x -v)",
+      "Bash(python -m pytest tests/test_enterprise.py tests/test_student.py tests/test_chat.py -v)",
+      "Bash(python -m pytest tests/test_enterprise.py tests/test_chat.py tests/test_student.py -v)",
+      "Bash(python -m pytest tests/test_enterprise.py tests/test_chat.py -v)",
+      "Bash(python -c \"import py_compile; py_compile.compile\\('api/student_routes.py', doraise=True\\); py_compile.compile\\('api/enterprise_routes.py', doraise=True\\); py_compile.compile\\('api/customer_routes.py', doraise=True\\); py_compile.compile\\('crud/student_crud.py', doraise=True\\); py_compile.compile\\('crud/enterprise_crud.py', doraise=True\\); py_compile.compile\\('crud/customer_crud.py', doraise=True\\); py_compile.compile\\('utils/file_parser.py', doraise=True\\); py_compile.compile\\('agents/enterprise/agent.py', doraise=True\\); py_compile.compile\\('schemas/schemas.py', doraise=True\\); py_compile.compile\\('schemas/__init__.py', doraise=True\\); print\\('All files compile OK'\\)\")"
     ]
   }
 }

@@ -29,6 +29,15 @@ const Router = (() => {
       return;
     }
 
+    // 角色限制
+    if (page.meta.roles && page.meta.roles.length > 0) {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      if (!page.meta.roles.includes(user.user_type)) {
+        redirectTo('/dashboard');
+        return;
+      }
+    }
+
     navigating = true;
     currentPage = path;
 
@@ -80,7 +89,7 @@ const Router = (() => {
         '/academic': '教务DDL', '/study-abroad': '留学进度', '/leave': '请假申请',
         '/feedback': '反馈工单', '/notifications': '通知中心',
         '/psych-alert': '心理预警', '/reports-center': '报表中心',
-        '/student-info': '学生信息', '/nl2sql': 'NL2SQL查询',
+        '/student-info': '学生信息',
         '/login': '登录',
       };
       titleEl.textContent = titles[path] || '粤教服务';

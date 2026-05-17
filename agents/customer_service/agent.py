@@ -259,28 +259,47 @@ class CustomerServiceAgent:
                     "response": "📋 信息已确认！提交接口: POST /api/student/feedback",
                     "confidence": 0.95,
                 }
-            else:
-                state.phase = "collecting"
-                info = self.llm.extract_info(
-                    user_input, ["反馈类型", "涉及人员", "详细描述", "期望解决方案"]
-                )
-                extracted = info.get("详细描述", "") or user_input
-                if extracted.strip() and len(extracted) > 3 and "content" in state.missing:
-                    state.collect("content", extracted[:200])
-                if not state.is_complete():
-                    stm.update(state, student_id=student_id)
+
+            stripped = user_input.strip()
+            # 短输入或切换话题 → 提供退出选项
+            if len(stripped) <= 5 or any(kw in stripped for kw in SlotState.SWITCH_TOPIC_KW):
+                state.confirm_retries += 1
+                if state.confirm_retries >= 2:
+                    stm.clear(student_id=student_id)
                     return {
-                        "intent": "feedback",
-                        "response": f"收到补充。还需要「{state.next_missing_display()}」，请描述~",
-                        "confidence": 0.85,
+                        "intent": "chitchat",
+                        "response": "检测到你可能想换个话题。已取消当前操作，有什么可以帮你的？",
+                        "confidence": 0.8,
                     }
-                state.phase = "confirming"
                 stm.update(state, student_id=student_id)
                 return {
                     "intent": "feedback",
-                    "response": f"已更新，请确认：\n\n{state.summary()}\n\n回复「确认」提交或继续补充~",
-                    "confidence": 0.9,
+                    "response": "你有一个待确认的反馈工单。回复「确认」提交，「取消」放弃，或告诉我你想做什么~",
+                    "confidence": 0.85,
                 }
+
+            state.confirm_retries = 0
+            state.phase = "collecting"
+            info = self.llm.extract_info(
+                user_input, ["反馈类型", "涉及人员", "详细描述", "期望解决方案"]
+            )
+            extracted = info.get("详细描述", "") or user_input
+            if extracted.strip() and len(extracted) > 3 and "content" in state.missing:
+                state.collect("content", extracted[:200])
+            if not state.is_complete():
+                stm.update(state, student_id=student_id)
+                return {
+                    "intent": "feedback",
+                    "response": f"收到补充。还需要「{state.next_missing_display()}」，请描述~",
+                    "confidence": 0.85,
+                }
+            state.phase = "confirming"
+            stm.update(state, student_id=student_id)
+            return {
+                "intent": "feedback",
+                "response": f"已更新，请确认：\n\n{state.summary()}\n\n回复「确认」提交或继续补充~",
+                "confidence": 0.9,
+            }
 
         # ===== 收集阶段 =====
         info = self.llm.extract_info(

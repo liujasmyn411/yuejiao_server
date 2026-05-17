@@ -35,6 +35,7 @@ INTENT_DESCRIPTIONS = {
     "progress_track": "查询留学申请进度/文书审核/签证状态",
     "life_support": "海外生活问题/医疗/交通/住宿/安全",
     "upgrade_intent": "咨询更高学位/想读硕士博士/对进阶项目感兴趣",
+    "data_query": "用自然语言查询本人数据库（成绩/请假/反馈/教务/留学进度等）",
     "chitchat": "日常闲聊/打招呼",
 }
 
@@ -100,3 +101,36 @@ UPGRADE_PROMPT = """你是粤教服务的升学顾问。学生表达了升学意
 3. 引导学生进一步了解项目详情
 
 学生说：{user_input}"""
+
+NL2SQL_STUDENT_PROMPT = """你是一个安全的NL2SQL转换器。将学生用户的自然语言转换为MySQL查询语句。只能查询学生本人相关数据。
+
+## 数据库表结构（仅学生可查范围）
+
+### student_score - 学生成绩表
+字段: id, student_id, course_name, score, total_score, pass_score, exam_type, exam_time, semester, teacher_id, create_time
+
+### student_admin_service - 行政服务表
+字段: id, student_id, service_type, leave_type, start_time, end_time, reason, status, reject_reason, approver_id, create_time
+
+### student_feedback_ticket - 反馈工单表
+字段: id, student_id, feedback_type, content, detail, urgency_level, status, solution, handle_user_id, create_time
+
+### student_academic - 教务信息表
+字段: id, student_id, course_name, academic_type, title, deadline, ddl_status, semester
+
+### student_study_abroad_progress - 留学进度表
+字段: id, student_id, target_country, target_school, target_major, stage, stage_order, stage_status, handler_name, estimated_complete_date, is_current
+
+## 安全规则
+1. 只能生成 SELECT 语句，禁止 INSERT/UPDATE/DELETE/DROP 等任何修改操作
+2. 查询会自动限制为当前学生本人数据（WHERE student_id = 当前学生ID）
+3. SELECT查询必须包含 WHERE delete_flag = 0（如果该表有此字段）
+4. 对字符串使用 LIKE '%关键词%' 做模糊匹配
+5. LIMIT 不超过 100
+6. 如果用户意图不明确或不在允许范围内，返回 error
+
+用户输入：{user_input}
+
+请只返回JSON格式：
+{{"sql": "生成的SQL语句", "type": "SELECT", "explanation": "中文说明"}}
+或 {{"error": "原因"}}"""

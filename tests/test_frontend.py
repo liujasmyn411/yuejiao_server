@@ -266,16 +266,18 @@ class TestEnterpriseAgentIntents:
         assert page.locator("#btn-new-report").count() == 1, "缺少「写日报」按钮"
         assert page.locator("#btn-voice-report").count() == 1, "缺少「语音转日报」按钮"
 
-    def test_page_nl2sql_visible(self, page, e2e_server):
-        """意图 data_query：NL2SQL 查询页面存在并可输入自然语言。"""
+    def test_chat_widget_visible(self, page, e2e_server):
+        """意图 data_query：AI 对话浮窗存在（NL2SQL 功能已整合至对话窗口）。"""
         _login(page, e2e_server, "员工1", "123456")
-        _navigate(page, e2e_server, "/nl2sql")
-        page.wait_for_selector("#nl2sql-input", timeout=10000)
-        content = page.locator("#content").inner_text()
-        assert "自然语言" in content or "NL2SQL" in content or "查询" in content, "NL2SQL 页面未正确渲染"
-        # 验证输入框和执行按钮存在
-        assert page.locator("#nl2sql-input").count() == 1
-        assert page.locator("#btn-nl2sql-run").count() == 1
+        _navigate(page, e2e_server, "/dashboard")
+        # 验证 AI 对话浮窗按钮和组件存在
+        assert page.locator("#chat-toggle").count() == 1, "缺少 AI 对话浮窗按钮"
+        assert page.locator("#chat-widget").count() == 1, "缺少 AI 对话浮窗"
+        # 打开对话浮窗
+        page.locator("#chat-toggle").click()
+        page.wait_for_selector("#chat-widget:not(.hidden)", timeout=5000)
+        assert page.locator("#chat-input").count() == 1, "缺少对话输入框"
+        assert page.locator("#chat-send").count() == 1, "缺少发送按钮"
 
     def test_page_approvals_visible(self, page, e2e_server):
         """意图 approval：审批管理页面存在。"""

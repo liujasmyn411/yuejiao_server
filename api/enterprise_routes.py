@@ -2,17 +2,18 @@
 粤教服务 - 企业智能助手 API 路由
 处理 CRM 客户管理 / 日报 / 员工查询等
 """
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from database import get_db
 from schemas import (
     LeadCreateRequest, LeadUpdateRequest,
     ReportCreateRequest, ScoreCreateRequest,
+    EmployeeUpdateRequest, ProjectCreateRequest,
 )
 from crud import (
     UserCRUD, CrmCRUD, ReportCRUD, ScoreCRUD, EmployeeCRUD, DashboardCRUD,
-    NotificationCRUD,
+    NotificationCRUD, ProjectCRUD,
 )
 from utils.auth import require_employee_or_admin
 from model import SysUser
@@ -112,6 +113,46 @@ def list_scores(student_id: int, db: Session = Depends(get_db), current_user: Sy
     ]}
 
 
+# ==================== 学生成绩批量上传 ====================
+
+@router.post("/score/batch")
+async def batch_upload_scores(file: UploadFile = File(...), db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
+    """批量上传学生成绩（支持 Excel .xlsx / .csv）
+
+    文件格式要求：
+    - 必填列：学生ID(学号)、课程名称(科目)、成绩(分数)
+    - 可选列：总分、及格线、考试类型、考试时间、学期、教师ID
+    - 支持中文或英文字段名
+    """
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="未选择文件")
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="文件为空")
+
+    from utils.file_parser import parse_score_file
+
+    try:
+        scores = parse_score_file(content, file.filename)
+        if not scores:
+            raise HTTPException(status_code=400, detail="未解析到有效数据，请检查文件格式")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    result = ScoreCRUD.batch_create(db, scores)
+    db.commit()
+
+    return {
+        "success": True,
+        "total": len(scores),
+        "success_count": result["success_count"],
+        "fail_count": result["fail_count"],
+        "errors": result["errors"],
+        "message": f"导入完成：成功 {result['success_count']} 条，失败 {result['fail_count']} 条",
+    }
+
+
 # ==================== 员工查询 ====================
 
 @router.get("/employee")
@@ -126,6 +167,38 @@ def list_employees(db: Session = Depends(get_db), current_user: SysUser = Depend
         }
         for e in employees
     ]}
+
+
+@router.put("/employee/{employee_id}")
+def update_employee(employee_id: int, req: EmployeeUpdateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
+    """修改员工通讯录信息（仅员工/管理员可操作）"""
+    employee = EmployeeCRUD.update(db, employee_id, **req.model_dump(exclude_none=True))
+    if not employee:
+        raise HTTPException(status_code=404, detail="员工不存在")
+    db.commit()
+    return {"success": True, "message": "员工信息已更新"}
+
+
+# ==================== 课程项目管理 ====================
+
+@router.post("/project")
+def create_project(req: ProjectCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
+    """添加课程项目（员工/管理员可操作）"""
+    project = ProjectCRUD.create(db, **req.model_dump(exclude_none=True))
+    db.commit()
+    return {"success": True, "project_id": project.id, "message": "项目添加成功"}
+
+
+@router.delete("/project/{project_id}")
+def delete_project(project_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
+    """删除课程项目（仅管理员可操作，软删除）"""
+    if current_user.user_type != "ADMIN":
+        raise HTTPException(status_code=403, detail="仅管理员可删除项目")
+    project = ProjectCRUD.delete(db, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="项目不存在")
+    db.commit()
+    return {"success": True, "message": "项目已删除"}
 
 
 # ==================== 仪表盘 ====================

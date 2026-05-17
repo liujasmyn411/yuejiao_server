@@ -4,16 +4,23 @@
 """
 import json
 from agents.student.prompts import (
-    SYSTEM_PROMPT, INTENT_DESCRIPTIONS, LIFE_SUPPORT_PROMPT, UPGRADE_PROMPT
+    SYSTEM_PROMPT, INTENT_DESCRIPTIONS, LIFE_SUPPORT_PROMPT, UPGRADE_PROMPT,
+    NL2SQL_STUDENT_PROMPT,
 )
 from agents.student.psych_monitor import PsychMonitor
 from agents.student.approval_flow import ApprovalFlow
+from agents.enterprise.nl2sql import NL2SQL
 from knowledge_base.vectorizer import get_rag_engine
 from utils.llm_client import get_llm_client
 from utils.conversation_state import (
     get_conversation_state_manager, SlotState
 )
 from utils.date_parser import normalize_datetime
+
+STUDENT_TABLES = [
+    "student_score", "student_admin_service", "student_feedback_ticket",
+    "student_academic", "student_study_abroad_progress",
+]
 
 
 class StudentAgent:
@@ -24,6 +31,11 @@ class StudentAgent:
         self.rag = get_rag_engine()
         self.psych = PsychMonitor()
         self.approval = ApprovalFlow()
+        self.nl2sql = NL2SQL(
+            table_allowlist=STUDENT_TABLES,
+            prompt_template=NL2SQL_STUDENT_PROMPT,
+            update_whitelist={},
+        )
         self.name = "学生助手Agent"
 
     # ==================== 意图路由 ====================
@@ -41,6 +53,7 @@ class StudentAgent:
             "progress_track": self._handle_progress_track,
             "life_support": self._handle_life_support,
             "upgrade_intent": self._handle_upgrade_intent,
+            "data_query": self._handle_data_query,
             "chitchat": self._handle_chitchat,
         }
 
@@ -63,11 +76,52 @@ class StudentAgent:
                               student_id: int, db) -> str:
         """行政服务 —— 请假申请/查询（槽位填充）"""
         # 查询审批状态
-        if any(w in user_input for w in ["查询", "状态", "进度", "审批", "通过"]):
+        QUERY_KW = ["查询", "状态", "进度", "审批", "通过", "查看", "看看",
+                     "记录", "历史", "申请"]
+        if any(w in user_input for w in QUERY_KW) and not any(
+            w in user_input for w in ["请假", "申请", "提交", "想请"]
+        ):
+            # 如果已有 student_id → 直接查询（需要 db）
+            if student_id:
+                if db:
+                    try:
+                        from crud import StudentServiceCRUD
+                        leaves = StudentServiceCRUD.get_leaves(db, student_id)
+                        if not leaves:
+                            return "你目前没有请假记录。"
+                        lines = ["📋 你的请假记录："]
+                        for l in leaves:
+                            status_icon = {"待审批": "⏳", "已通过": "✅", "已驳回": "❌"}.get(l.status, "")
+                            start = str(l.start_time)[:16] if l.start_time else "未知"
+                            end = str(l.end_time)[:16] if l.end_time else "未知"
+                            lines.append(
+                                f"  {status_icon} [{l.leave_type}] {start} ~ {end}\n"
+                                f"     原因: {l.reason or '无'} | 状态: {l.status}"
+                            )
+                        return "\n".join(lines)
+                    except Exception as e:
+                        return f"查询请假记录失败: {e}"
+                else:
+                    return (
+                        "你可以通过以下方式查询审批状态：\n"
+                        f"  • GET /api/student/leave?student_id={student_id}\n"
+                        "  • 在浏览器中打开上述地址即可查看"
+                    )
+
+            # 没有 student_id → 启动查询会话，等用户提供 ID
+            stm = get_conversation_state_manager()
+            state = stm.start(
+                intent="admin_query",
+                table_name="",
+                agent_type="student",
+                student_id=student_id,
+                context={},
+            )
+            state.required_fields = {"student_id": "学生ID"}
+            state.missing = ["student_id"]
+            stm.update(state, student_id=student_id)
             return (
-                "你可以通过以下方式查询审批状态：\n"
-                "  • GET /api/student/leave?student_id=你的ID\n"
-                "  • 直接告诉我你的学生ID，我帮你查~"
+                "我来帮你查询请假记录。请提供你的学生ID（直接发数字即可）~"
             )
 
         # 请假提交 → 槽位填充
@@ -152,25 +206,66 @@ class StudentAgent:
 
         return reply
 
+    # 投诉强信号词 —— 出现这些词才判定为"真投诉内容"
+    STRONG_COMPLAINT_KW = [
+        "投诉", "举报", "差劲", "太烂", "坑人", "骗", "退款", "赔偿",
+        "态度恶劣", "不负责", "敷衍", "糊弄", "乱收费", "虚假", "劣质",
+        "欺负", "霸凌", "歧视", "不公平", "抗议", "维权", "曝光",
+    ]
+
+    def _has_real_feedback_content(self, user_input: str, info: dict) -> bool:
+        """判断用户输入是否包含真正的投诉/反馈内容（而非闲聊中含建议/反馈等词）"""
+        # 条件1：LLM明确提取到了"详细描述"且长度≥8字
+        detail = info.get("详细描述", "")
+        if detail and len(detail.strip()) >= 8:
+            return True
+        # 条件2：包含投诉强信号词
+        if any(kw in user_input for kw in self.STRONG_COMPLAINT_KW):
+            return True
+        # 条件3：整体输入较长（≥15字）且含负面语义
+        if len(user_input) >= 15 and any(
+            w in user_input for w in ["不满", "不好", "不行", "不对", "生气", "失望",
+                                        "问题", "麻烦", "糟糕", "难受", "受不了"]
+        ):
+            return True
+        return False
+
     def _handle_feedback(self, user_input: str, entities: dict,
                          student_id: int, db) -> str:
         """售后反馈 —— 投诉/建议提交（槽位填充：收集所有必填字段后再写入）"""
         stm = get_conversation_state_manager()
+
+        # 0. 如果已有活跃的 feedback 状态 → 不要新建，交给 continue_data_collection
+        existing = stm.get(student_id=student_id)
+        if existing and existing.intent == "feedback":
+            # 由 chat_routes 步骤0 路由到 continue_data_collection，
+            # 但如果走到这里说明路由没生效，直接返回提示
+            return "你有一个待确认的反馈工单，请先处理（回复「确认」或「取消」）~"
 
         # 1. 从用户输入提取已提供的信息
         info = self.llm.extract_info(
             user_input,
             ["反馈类型", "涉及人员", "详细描述", "期望解决方案"]
         )
-        extracted_content = info.get("详细描述", "") or user_input[:200]
 
-        # 2. 检查必填字段是否齐全
+        # 2. 判断是否为真投诉内容（Fix 1：提高门槛）
         context = {"student_id": student_id} if student_id else {}
+        has_real_content = self._has_real_feedback_content(user_input, info)
 
-        # 判断 content（反馈内容）是否充分
-        has_content = bool(extracted_content.strip()) and len(extracted_content) > 3
-        if not has_content:
-            # 用户只说"我要投诉"之类，没有具体内容 → 追问
+        if not has_real_content:
+            # 可能是闲聊混入了"建议""反馈"等词，或者只是"我要投诉"没有细节
+            detail = info.get("详细描述", "")
+            if detail and len(detail.strip()) >= 4:
+                # LLM提取到了一点内容但不够充分 → 追问
+                pass
+            elif "投诉" in user_input or "反馈" in user_input or "建议" in user_input:
+                # 用户确实表达了投诉意图但没给细节
+                pass
+            else:
+                # 应该不是真的想投诉，直接走闲聊兜底
+                return self._handle_chitchat(user_input, entities, student_id, db)
+
+            # 用户表达了投诉意图但内容不充分 → 启动收集
             state = stm.start(
                 intent="feedback",
                 table_name="student_feedback_ticket",
@@ -178,53 +273,94 @@ class StudentAgent:
                 student_id=student_id,
                 context=context,
             )
-            # 合并已提取的字段
             for field_name, value in info.items():
                 if value and field_name in state.required_fields:
                     state.collect(field_name, value)
-                    if field_name in state.missing:
-                        state.missing.remove(field_name)
             stm.update(state, student_id=student_id)
 
             return (
                 f"收到，我来帮你提交反馈。\n"
-                f"请详细描述你要{'投诉' if '投诉' in user_input else '反馈'}的具体内容，比如：\n"
+                f"请详细描述你要投诉/反馈的具体内容，比如：\n"
                 f"  • 涉及哪些人员？\n"
                 f"  • 发生了什么事情？\n"
                 f"  • 你希望怎么解决？\n\n"
                 f"请一次性告诉我，我会整理后为你创建工单~"
             )
 
-        # 3. 必填字段齐全 → 进入确认阶段（不直接写入）
-        if has_content:
-            stm = get_conversation_state_manager()
-            context = {"student_id": student_id} if student_id else {}
-            state = stm.start(
-                intent="feedback",
-                table_name="student_feedback_ticket",
-                agent_type="student",
-                student_id=student_id,
-                context=context,
-            )
-            state.collect("content", extracted_content[:200])
-            for field_name, value in info.items():
-                if value and field_name in state.missing:
-                    state.collect(field_name, value)
-            state.phase = "confirming"
-            stm.update(state, student_id=student_id)
+        # 3. 真投诉内容 → 进入确认阶段
+        extracted_content = info.get("详细描述", "") or user_input[:200]
+        state = stm.start(
+            intent="feedback",
+            table_name="student_feedback_ticket",
+            agent_type="student",
+            student_id=student_id,
+            context=context,
+        )
+        state.collect("content", extracted_content[:200])
+        for field_name, value in info.items():
+            if value and field_name in state.missing:
+                state.collect(field_name, value)
+        state.phase = "confirming"
+        stm.update(state, student_id=student_id)
 
-            return (
-                f"📋 已识别到你的反馈信息：\n\n{state.summary()}\n\n"
-                f"回复「确认」提交工单，回复「取消」放弃，或继续补充信息~"
-            )
-
-        if not student_id:
-            return "请提供你的学生ID以创建工单。"
+        return (
+            f"📋 已识别到你的反馈信息：\n\n{state.summary()}\n\n"
+            f"回复「确认」提交工单，回复「取消」放弃，或继续补充信息~"
+        )
 
     def continue_data_collection(self, user_input: str, state: SlotState,
                                  student_id: int = None, db=None) -> dict:
-        """通用槽位填充 —— 支持取消 + 确认 + 重新编辑"""
+        """通用槽位填充 —— 支持取消 + 确认 + 重新编辑 + 查询"""
         stm = get_conversation_state_manager()
+
+        # ===== 查询类意图（无需插入，只查数据） =====
+        if state.intent == "admin_query":
+            if SlotState.is_cancel(user_input):
+                stm.clear(student_id=student_id)
+                return {"intent": "admin_query", "response": "好的，已取消查询。", "confidence": 0.95}
+
+            # 尝试从输入中提取学生ID（纯数字）
+            import re
+            id_match = re.search(r'\b(\d+)\b', user_input)
+            queried_id = int(id_match.group(1)) if id_match else None
+
+            if not queried_id:
+                stm.update(state, student_id=student_id)
+                return {
+                    "intent": "admin_query",
+                    "response": "请提供一个有效的学生ID（纯数字），比如直接发「7」~",
+                    "confidence": 0.85,
+                }
+
+            # 拿到了学生ID → 查询
+            stm.clear(student_id=student_id)
+            if db:
+                try:
+                    from crud import StudentServiceCRUD
+                    leaves = StudentServiceCRUD.get_leaves(db, queried_id)
+                    if not leaves:
+                        return {
+                            "intent": "admin_query",
+                            "response": f"学生 {queried_id} 目前没有请假记录。",
+                            "confidence": 0.9,
+                        }
+                    lines = [f"📋 学生 {queried_id} 的请假记录："]
+                    for l in leaves:
+                        status_icon = {"待审批": "⏳", "已通过": "✅", "已驳回": "❌"}.get(l.status, "")
+                        start = str(l.start_time)[:16] if l.start_time else "未知"
+                        end = str(l.end_time)[:16] if l.end_time else "未知"
+                        lines.append(
+                            f"  {status_icon} [{l.leave_type}] {start} ~ {end}\n"
+                            f"     原因: {l.reason or '无'} | 状态: {l.status}"
+                        )
+                    return {"intent": "admin_query", "response": "\n".join(lines), "confidence": 0.9}
+                except Exception as e:
+                    return {"intent": "admin_query", "response": f"查询失败: {e}", "confidence": 0.9}
+            return {
+                "intent": "admin_query",
+                "response": f"数据库不可用。可通过 GET /api/student/leave?student_id={queried_id} 查询。",
+                "confidence": 0.9,
+            }
 
         # ===== 取消检测（所有阶段） =====
         if SlotState.is_cancel(user_input):
@@ -238,37 +374,74 @@ class StudentAgent:
         # ===== 确认阶段 =====
         if state.phase == "confirming":
             if SlotState.is_confirm(user_input):
-                # 用户确认 → 写入数据库
                 stm.clear(student_id=student_id)
                 return self._commit_collected(
                     state, user_input,
                     self._extract_for_intent(user_input, state.intent),
                     student_id, db
                 )
-            else:
-                # 用户没说确认 → 当成补充信息，退回收集阶段
-                state.phase = "collecting"
-                info = self._extract_for_intent(user_input, state.intent)
-                self._merge_collected(state, info, user_input)
-                # 继续检查是否还缺字段
-                if not state.is_complete():
-                    stm.update(state, student_id=student_id)
+
+            # 用户没说确认 → 判断是否想另起话题
+            stripped = user_input.strip()
+
+            # 条件A：输入很短（≤5字）且明显不是补充投诉内容 → 不是补充，是另起话题
+            if len(stripped) <= 5:
+                state.confirm_retries += 1
+                if state.confirm_retries >= 2:
+                    # 多次短输入 → 主动帮用户做选择
+                    stm.clear(student_id=student_id)
                     return {
-                        "intent": state.intent,
-                        "response": f"收到补充信息。还需要「{state.next_missing_display()}」，请描述一下~",
-                        "confidence": 0.85,
+                        "intent": "chitchat",
+                        "response": (
+                            f"检测到你可能想换个话题。已取消之前的{'投诉' if state.intent == 'feedback' else ''}操作。\n"
+                            f"有什么可以帮你的？"
+                        ),
+                        "confidence": 0.8,
                     }
-                # 不缺了，再次进入确认阶段
-                state.phase = "confirming"
                 stm.update(state, student_id=student_id)
                 return {
                     "intent": state.intent,
                     "response": (
-                        f"好的，已更新信息。请确认以下内容：\n\n{state.summary()}\n\n"
-                        f"回复「确认」提交，或继续补充其他信息~"
+                        f"你有一个待确认的{'投诉工单' if state.intent == 'feedback' else '申请'}。\n"
+                        f"回复「确认」提交，「取消」放弃。\n"
+                        f"或者告诉我你想做什么，我帮你处理~"
                     ),
-                    "confidence": 0.9,
+                    "confidence": 0.85,
                 }
+
+            # 条件B：输入包含"切换话题"关键词 → 用户明显想干别的事
+            if any(kw in stripped for kw in SlotState.SWITCH_TOPIC_KW):
+                stm.clear(student_id=student_id)
+                return {
+                    "intent": "chitchat",
+                    "response": (
+                        f"好的，已取消当前操作。请重新描述你的需求，我来帮你处理~"
+                    ),
+                    "confidence": 0.85,
+                }
+
+            # 条件C：正常情况 → 当成补充信息
+            state.confirm_retries = 0  # 确实在补充内容，重置计数
+            state.phase = "collecting"
+            info = self._extract_for_intent(user_input, state.intent)
+            self._merge_collected(state, info, user_input)
+            if not state.is_complete():
+                stm.update(state, student_id=student_id)
+                return {
+                    "intent": state.intent,
+                    "response": f"收到补充信息。还需要「{state.next_missing_display()}」，请描述一下~",
+                    "confidence": 0.85,
+                }
+            state.phase = "confirming"
+            stm.update(state, student_id=student_id)
+            return {
+                "intent": state.intent,
+                "response": (
+                    f"好的，已更新信息。请确认以下内容：\n\n{state.summary()}\n\n"
+                    f"回复「确认」提交，或继续补充其他信息~"
+                ),
+                "confidence": 0.9,
+            }
 
         # ===== 收集阶段 =====
         info = self._extract_for_intent(user_input, state.intent)
@@ -565,6 +738,43 @@ class StudentAgent:
             self._record_upgrade_lead(student_id, info, db)
 
         return reply
+
+    def _handle_data_query(self, user_input: str, entities: dict,
+                           student_id: int, db) -> str:
+        """NL2SQL 数据查询 —— 仅限学生本人数据"""
+        if not db:
+            return (
+                "数据库连接不可用。\n"
+                "你可以尝试以下查询：\n"
+                "  • '查询我的成绩'\n"
+                "  • '我的请假记录'\n"
+                "  • '我的教务DDL'\n"
+                "  • '我的留学进度'"
+            )
+        if not student_id:
+            return "未能识别你的学生身份，请先登录后再试。"
+        try:
+            result = self.nl2sql.query(db, user_input, student_scope=student_id)
+            if "error" in result:
+                return f"查询失败: {result['error']}\n请尝试更具体的描述，如'查询我的成绩'或'我的请假记录'。"
+
+            data = result.get("data", [])
+            sql = result.get("sql", "")
+            explanation = result.get("explanation", "")
+
+            lines = [f"{explanation}\n执行SQL: `{sql}`\n"]
+            if not data:
+                lines.append("查询结果为空。")
+            else:
+                lines.append(f"共 {len(data)} 条记录：")
+                for i, row in enumerate(data[:15], 1):
+                    values = ", ".join(f"{k}={v}" for k, v in list(row.items())[:5])
+                    lines.append(f"  {i}. {values}")
+                if len(data) > 15:
+                    lines.append(f"  ... 还有 {len(data) - 15} 条")
+            return "\n".join(lines)
+        except Exception as e:
+            return f"查询出错: {e}"
 
     def _handle_chitchat(self, user_input: str, entities: dict,
                          student_id: int, db) -> str:

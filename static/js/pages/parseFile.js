@@ -1,19 +1,19 @@
 /**
- * 文件解析页 — 上传 PDF/Excel/TXT → 提取客户画像
+ * 文件解析页 — 上传 PDF/Excel/TXT → 提取画像 → 意向研判
  */
 const ParseFilePage = (() => {
   function render() {
     return `
       <div class="card" style="max-width:700px">
-        <h4 style="margin-bottom:8px">📎 客户文件解析</h4>
-        <p class="text-muted" style="margin-bottom:20px">上传客户简历或信息文件（PDF / Excel / TXT），自动提取画像关键字段</p>
+        <h4 style="margin-bottom:8px">📎 客户文件解析 & 意向研判</h4>
+        <p class="text-muted" style="margin-bottom:20px">上传客户简历或信息文件（PDF / Excel / TXT），自动提取画像并研判是否为意向客户</p>
         <div class="upload-zone" id="upload-zone">
           <div class="upload-zone__icon">📂</div>
           <p>点击或拖拽文件到此处</p>
           <small class="text-muted">支持 PDF、Excel (.xlsx/.xls)、TXT，最大 10MB</small>
           <input type="file" id="file-input" accept=".pdf,.xlsx,.xls,.txt" style="display:none">
         </div>
-        <div id="parse-loading" class="page-loading hidden">正在解析...</div>
+        <div id="parse-loading" class="page-loading hidden">正在解析并研判...</div>
         <div id="parse-result" class="mt-16"></div>
       </div>
     `;
@@ -54,13 +54,18 @@ const ParseFilePage = (() => {
       }
 
       const profile = data.extracted_profile || {};
+      const assessment = data.assessment || {};
+      const isIntended = assessment.is_intended;
+
       result.innerHTML = `
         <div class="card">
           <h4 style="margin-bottom:12px">✅ 解析成功 — ${esc(data.filename)}</h4>
           <div class="parse-profile">
             ${renderProfileFields(profile)}
           </div>
-          Toast.show('文件解析成功', 'success');
+
+          ${renderAssessment(assessment)}
+
           ${data.text ? `
             <details class="mt-16">
               <summary style="cursor:pointer;color:var(--color-text-secondary);font-weight:600">查看原始文本</summary>
@@ -69,10 +74,34 @@ const ParseFilePage = (() => {
           ` : ''}
         </div>
       `;
+      Toast.show('文件解析成功', 'success');
     } catch (e) {
       loading.classList.add('hidden');
       result.innerHTML = `<div class="page-error">解析失败: ${e.message}</div>`;
     }
+  }
+
+  function renderAssessment(assessment) {
+    if (!assessment || assessment.score === undefined) return '';
+    const isIntended = assessment.is_intended;
+    const icon = isIntended ? '✅' : '❌';
+    const label = isIntended ? '符合意向客户条件' : '暂不符合意向客户条件';
+    const color = isIntended ? '#16a34a' : '#dc2626';
+    return `
+      <div class="card mt-16" style="border-left: 4px solid ${color}; background: ${isIntended ? '#f0fdf4' : '#fef2f2'}">
+        <h4 style="margin-bottom:8px">🔍 ${icon} 意向研判结果</h4>
+        <div style="margin-bottom:4px"><strong>判定：</strong><span style="color:${color};font-weight:700">${label}</span></div>
+        <div style="margin-bottom:4px"><strong>综合评分：</strong><span style="font-weight:700">${assessment.score}/100</span></div>
+        ${assessment.matched_program ? `<div style="margin-bottom:4px"><strong>匹配项目：</strong>${esc(assessment.matched_program)}</div>` : ''}
+        ${assessment.reasons && assessment.reasons.length ? `
+          <div style="margin-top:8px"><strong>研判依据：</strong>
+            <ul style="margin:4px 0;padding-left:20px">${assessment.reasons.map(r => `<li>${esc(r)}</li>`).join('')}</ul>
+          </div>
+        ` : ''}
+        ${assessment.lead_created ? `<div style="margin-top:8px" class="text-success">✅ 已自动录入意向客户表（ID: ${assessment.lead_id}）</div>` : ''}
+        ${!isIntended ? '<div style="margin-top:8px" class="text-muted">💡 该文件内容暂未达到意向客户判定标准，建议持续关注</div>' : ''}
+      </div>
+    `;
   }
 
   function renderProfileFields(profile) {

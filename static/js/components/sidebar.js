@@ -19,14 +19,14 @@ const Sidebar = (() => {
       { icon: '✅', label: '审批管理', path: '/approvals', roles: ['ADMIN', 'EMPLOYEE'] },
       { icon: '🏢', label: '组织架构', path: '/org-chart', roles: ['ADMIN', 'EMPLOYEE'] },
       { icon: '📊', label: '报表中心', path: '/reports-center', roles: ['ADMIN', 'EMPLOYEE'] },
-      { icon: '🔍', label: 'NL2SQL', path: '/nl2sql', roles: ['ADMIN', 'EMPLOYEE'] },
+
       { label: '— 学生 —', roles: ['ADMIN', 'STUDENT'], type: 'label' },
       { icon: '📋', label: '教务DDL', path: '/academic', roles: ['ADMIN', 'STUDENT'] },
       { icon: '🎓', label: '留学进度', path: '/study-abroad', roles: ['ADMIN', 'STUDENT'] },
       { icon: '🏖', label: '请假申请', path: '/leave', roles: ['ADMIN', 'STUDENT'] },
       { icon: '💬', label: '反馈工单', path: '/feedback', roles: ['ADMIN', 'STUDENT'] },
       { icon: '🔔', label: '通知中心', path: '/notifications', roles: ['ADMIN', 'STUDENT'] },
-      { icon: '🧠', label: '心理预警', path: '/psych-alert', roles: ['ADMIN', 'STUDENT'] },
+      { icon: '🧠', label: '心理预警', path: '/psych-alert', roles: ['ADMIN', 'EMPLOYEE'] },
       { icon: '🎓', label: '学生信息', path: '/student-info', roles: ['ADMIN', 'STUDENT'] },
     ],
     EMPLOYEE: [], // 复用 ADMIN 的（通过 roles 字段控制）

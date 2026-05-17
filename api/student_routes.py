@@ -9,13 +9,13 @@ from sqlalchemy.orm import Session
 from database import get_db
 from schemas import (
     LeaveCreateRequest, FeedbackCreateRequest, FeedbackResolveRequest,
-    PsychAlertCreateRequest, RiskLevelEnum
+    PsychAlertCreateRequest, RiskLevelEnum, StudyAbroadUpdateRequest,
 )
 from crud import (
     UserCRUD, StudentServiceCRUD, FeedbackCRUD, PsychAlertCRUD,
     AcademicCRUD, StudyAbroadCRUD, NotificationCRUD,
 )
-from utils.auth import get_current_user, require_student
+from utils.auth import get_current_user, require_student, require_employee_or_admin, enforce_self_only
 from model import SysUser
 
 
@@ -36,7 +36,8 @@ def _validate_student(student_id: int, db: Session):
 # ---- 根据id查询学生信息 ----
 @router.get("/api/student/info")
 def get_student_info(student_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """根据ID查询学生基本信息"""
+    """根据ID查询学生基本信息（学生只能查自己）"""
+    enforce_self_only(current_user, student_id)
     student = _validate_student(student_id, db)
     return {
         "id": student.id,
@@ -95,8 +96,9 @@ def create_leave(req: LeaveCreateRequest, db: Session = Depends(get_db), current
 # ---- 请假: 查询 ----
 @router.get("/api/student/leave")
 def list_leaves(student_id: int = 0, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """查询请假记录"""
+    """查询请假记录（学生只能查自己，员工/管理员可查全部）"""
     if student_id:
+        enforce_self_only(current_user, student_id)
         _validate_student(student_id, db)
     leaves = StudentServiceCRUD.get_leaves(db, student_id)
     return {"leaves": [
@@ -111,8 +113,42 @@ def list_leaves(student_id: int = 0, db: Session = Depends(get_db), current_user
 @router.post("/api/student/feedback")
 def create_feedback(req: FeedbackCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_student)):
     """学生提交投诉反馈"""
-    _validate_student(req.student_id, db)
+    student = _validate_student(req.student_id, db)
     ticket = FeedbackCRUD.create(db, req)
+
+    # 给管理员和班主任发送通知
+    recipients = set()
+    admins = db.query(SysUser).filter(
+        SysUser.user_type == "ADMIN",
+        SysUser.delete_flag == 0,
+    ).all()
+    for admin in admins:
+        if admin.id != req.student_id:
+            recipients.add(admin.id)
+
+    if student.head_teacher_id:
+        recipients.add(student.head_teacher_id)
+
+    for recipient_id in recipients:
+        NotificationCRUD.create(
+            db,
+            recipient_id=recipient_id,
+            title="新反馈工单",
+            content=f"学生 {student.real_name} 提交了{req.feedback_type}({req.content})，紧急程度：{req.urgency_level}",
+            notification_type="new_feedback",
+            related_id=ticket.id,
+        )
+
+    # 给学生发确认通知
+    NotificationCRUD.create(
+        db,
+        recipient_id=req.student_id,
+        title="反馈已提交",
+        content=f"您的{req.feedback_type}已提交，我们会尽快处理",
+        notification_type="feedback_submitted",
+        related_id=ticket.id,
+    )
+
     db.commit()
     return {"success": True, "ticket_id": ticket.id, "message": "投诉已提交，我们会尽快处理"}
 
@@ -120,8 +156,9 @@ def create_feedback(req: FeedbackCreateRequest, db: Session = Depends(get_db), c
 # ---- 投诉反馈: 查询 ----
 @router.get("/api/student/feedback")
 def list_feedback(student_id: int = 0, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """查询投诉反馈列表"""
+    """查询投诉反馈列表（学生只能查自己，员工/管理员可查全部）"""
     if student_id:
+        enforce_self_only(current_user, student_id)
         _validate_student(student_id, db)
     tickets = FeedbackCRUD.get_all(db, student_id)
     return {"tickets": [
@@ -134,8 +171,8 @@ def list_feedback(student_id: int = 0, db: Session = Depends(get_db), current_us
 
 # ---- 投诉反馈: 处理 ----
 @router.put("/api/student/feedback/{ticket_id}/resolve")
-def resolve_feedback(ticket_id: int, req: FeedbackResolveRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """处理投诉反馈工单（老师/管理员标记已解决）"""
+def resolve_feedback(ticket_id: int, req: FeedbackResolveRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
+    """处理投诉反馈工单（仅员工/管理员可操作）"""
     ticket = FeedbackCRUD.resolve(db, ticket_id, req.solution, req.handle_user_id)
     if not ticket:
         raise HTTPException(status_code=404, detail="工单不存在")
@@ -166,8 +203,8 @@ def create_psych_alert(req: PsychAlertCreateRequest, db: Session = Depends(get_d
 
 # ---- 心理预警: 查询 ----
 @router.get("/api/student/psych-alert")
-def list_psych_alerts(risk_level: RiskLevelEnum = None, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """查询心理预警列表"""
+def list_psych_alerts(risk_level: RiskLevelEnum = None, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
+    """查询心理预警列表（仅员工/管理员可查看）"""
     alerts = PsychAlertCRUD.get_all(db, risk_level.value if risk_level else "")
     return {"alerts": [
         {"id": a.id, "student_id": a.student_id, "trigger_reason": a.trigger_reason,
@@ -181,7 +218,8 @@ def list_psych_alerts(risk_level: RiskLevelEnum = None, db: Session = Depends(ge
 
 @router.get("/api/student/academic")
 def list_academic(student_id: int, academic_type: str = "", db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """查询学生教务信息（考试/论文DDL/作业）"""
+    """查询学生教务信息（学生只能查自己）"""
+    enforce_self_only(current_user, student_id)
     _validate_student(student_id, db)
     items = AcademicCRUD.get_by_student(db, student_id, academic_type)
     return {"academics": [
@@ -200,7 +238,8 @@ def list_academic(student_id: int, academic_type: str = "", db: Session = Depend
 
 @router.get("/api/student/academic/upcoming")
 def list_upcoming_academic(student_id: int, days: int = 14, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """查询即将到来的DDL（未来N天内的考试/论文/作业）"""
+    """查询即将到来的DDL（学生只能查自己）"""
+    enforce_self_only(current_user, student_id)
     _validate_student(student_id, db)
     items = AcademicCRUD.get_upcoming(db, student_id, days)
     return {"upcoming": [
@@ -218,7 +257,8 @@ def list_upcoming_academic(student_id: int, days: int = 14, db: Session = Depend
 
 @router.get("/api/student/study-abroad")
 def list_study_abroad_progress(student_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """查询学生留学业务全流程进度"""
+    """查询学生留学业务全流程进度（学生只能查自己）"""
+    enforce_self_only(current_user, student_id)
     _validate_student(student_id, db)
     items = StudyAbroadCRUD.get_by_student(db, student_id)
     if not items:
@@ -241,7 +281,8 @@ def list_study_abroad_progress(student_id: int, db: Session = Depends(get_db), c
 
 @router.get("/api/student/study-abroad/current")
 def get_current_stage(student_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """查询学生当前所处的留学进度阶段"""
+    """查询学生当前所处的留学进度阶段（学生只能查自己）"""
+    enforce_self_only(current_user, student_id)
     _validate_student(student_id, db)
     stage = StudyAbroadCRUD.get_current_stage(db, student_id)
     if not stage:
@@ -259,11 +300,22 @@ def get_current_stage(student_id: int, db: Session = Depends(get_db), current_us
     }
 
 
+@router.put("/api/student/study-abroad/{progress_id}")
+def update_study_abroad_progress(progress_id: int, req: StudyAbroadUpdateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
+    """修改学生留学进度（仅员工/管理员可操作）"""
+    record = StudyAbroadCRUD.update(db, progress_id, **req.model_dump(exclude_none=True))
+    if not record:
+        raise HTTPException(status_code=404, detail="留学进度记录不存在")
+    db.commit()
+    return {"success": True, "message": "留学进度已更新"}
+
+
 # ==================== 站内通知接口 ====================
 
 @router.get("/api/student/notification")
 def list_notifications(recipient_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """查询用户通知列表"""
+    """查询用户通知列表（只能查自己的）"""
+    enforce_self_only(current_user, recipient_id)
     notifs = NotificationCRUD.get_by_recipient(db, recipient_id)
     return {"notifications": [
         {"id": n.id, "title": n.title, "content": n.content,
@@ -275,14 +327,16 @@ def list_notifications(recipient_id: int, db: Session = Depends(get_db), current
 
 @router.get("/api/student/notification/unread-count")
 def unread_count(recipient_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """查询未读通知数"""
+    """查询未读通知数（只能查自己的）"""
+    enforce_self_only(current_user, recipient_id)
     count = NotificationCRUD.get_unread_count(db, recipient_id)
     return {"recipient_id": recipient_id, "unread_count": count}
 
 
 @router.put("/api/student/notification/{notif_id}/read")
 def mark_notification_read(notif_id: int, recipient_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """标记单条通知为已读"""
+    """标记单条通知为已读（只能操作自己的）"""
+    enforce_self_only(current_user, recipient_id)
     notif = NotificationCRUD.mark_read(db, notif_id, recipient_id)
     if not notif:
         raise HTTPException(status_code=404, detail="通知不存在")
@@ -292,10 +346,23 @@ def mark_notification_read(notif_id: int, recipient_id: int, db: Session = Depen
 
 @router.put("/api/student/notification/read-all")
 def mark_all_read(recipient_id: int, db: Session = Depends(get_db), current_user: SysUser = Depends(get_current_user)):
-    """标记所有通知为已读"""
+    """标记所有通知为已读（只能操作自己的）"""
+    enforce_self_only(current_user, recipient_id)
     NotificationCRUD.mark_all_read(db, recipient_id)
     db.commit()
     return {"success": True, "message": "全部已读"}
+
+
+# ==================== 学生 NL2SQL 查询接口 ====================
+
+@router.post("/api/student/nl2sql")
+def student_nl2sql(message: dict, db: Session = Depends(get_db), current_user: SysUser = Depends(require_student)):
+    """学生自然语言查询自己的数据（自动限制为仅查本人）"""
+    from agents.enterprise.nl2sql import NL2SQL
+    nl2sql = NL2SQL()
+    text = message.get("message", "")
+    result = nl2sql.query(db, text, student_scope=current_user.id)
+    return result
 
 
 # ==================== 学生助手对话接口 ====================

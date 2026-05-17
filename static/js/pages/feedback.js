@@ -3,10 +3,12 @@
  */
 const FeedbackPage = (() => {
   function render() {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const isStudent = user.user_type === 'STUDENT';
     return `
       <div class="page-header flex-between">
         <h3 style="margin:0">💬 反馈工单</h3>
-        <button class="btn btn-primary" id="btn-new-feedback">+ 提交反馈</button>
+        ${isStudent ? '<button class="btn btn-primary" id="btn-new-feedback">+ 提交反馈</button>' : ''}
       </div>
       <div id="feedback-list" class="mt-16">
         <div class="page-loading">加载中...</div>
@@ -16,12 +18,14 @@ const FeedbackPage = (() => {
 
   async function onMount() {
     const user = JSON.parse(localStorage.getItem('user') || '{}');
-    document.getElementById('btn-new-feedback').onclick = () => openCreateModal(user.id);
+    const btn = document.getElementById('btn-new-feedback');
+    if (btn) btn.onclick = () => openCreateModal(user.id);
     load(user);
   }
 
   async function load(user) {
     const container = document.getElementById('feedback-list');
+    const isEmployee = user.user_type === 'EMPLOYEE' || user.user_type === 'ADMIN';
     try {
       const url = user.user_type === 'STUDENT'
         ? `/api/student/feedback?student_id=${user.id}`
@@ -35,7 +39,7 @@ const FeedbackPage = (() => {
       container.innerHTML = `
         <div class="table-container">
           <table class="table">
-            <thead><tr><th>ID</th><th>学生ID</th><th>类型</th><th>内容</th><th>紧急度</th><th>状态</th><th>解决方案</th><th>操作</th></tr></thead>
+            <thead><tr><th>ID</th><th>学生ID</th><th>类型</th><th>内容</th><th>紧急度</th><th>状态</th><th>解决方案</th>${isEmployee ? '<th>操作</th>' : ''}</tr></thead>
             <tbody>
               ${tickets.map(t => `
                 <tr>
@@ -46,9 +50,7 @@ const FeedbackPage = (() => {
                   <td>${urgencyTag(t.urgency_level)}</td>
                   <td>${statusTag(t.status)}</td>
                   <td style="max-width:150px">${esc(t.solution || '-')}</td>
-                  <td>
-                    ${t.status !== '已解决' ? `<button class="btn btn-sm btn-success btn-resolve" data-id="${t.id}">解决</button>` : ''}
-                  </td>
+                  ${isEmployee ? `<td>${t.status !== '已解决' ? `<button class="btn btn-sm btn-success btn-resolve" data-id="${t.id}">解决</button>` : ''}</td>` : ''}
                 </tr>
               `).join('')}
             </tbody>

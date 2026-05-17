@@ -86,6 +86,78 @@ class ScoreCRUD:
             StudentScore.delete_flag == 0
         ).order_by(StudentScore.exam_time.desc()).all()
 
+    @staticmethod
+    def batch_create(db: Session, scores: list[dict]) -> dict:
+        """批量创建成绩，跳过已存在的重复记录
+
+        Returns:
+            {success_count, fail_count, errors: [{row, reason}, ...]}
+        """
+        from datetime import datetime
+        success = 0
+        fail = 0
+        errors = []
+
+        for i, item in enumerate(scores):
+            try:
+                student_id = item.get("student_id")
+                course_name = item.get("course_name")
+                score_val = item.get("score")
+                exam_type = item.get("exam_type", "")
+                semester = item.get("semester", "")
+                exam_time = item.get("exam_time")
+
+                # 检查学生是否存在
+                student = db.query(SysUser).filter(
+                    SysUser.id == student_id,
+                    SysUser.user_type == "STUDENT",
+                    SysUser.delete_flag == 0,
+                ).first()
+                if not student:
+                    fail += 1
+                    errors.append({"row": i + 1, "reason": f"学生ID={student_id} 不存在或非学生身份"})
+                    continue
+
+                # 检查重复（相同学期+相同课程+相同考试类型）
+                existing = db.query(StudentScore).filter(
+                    StudentScore.student_id == student_id,
+                    StudentScore.course_name == course_name,
+                    StudentScore.exam_type == exam_type,
+                    StudentScore.semester == semester,
+                    StudentScore.delete_flag == 0,
+                ).first()
+                if existing:
+                    fail += 1
+                    errors.append({"row": i + 1, "reason": f"学生{student_id} 课程{course_name} 学期{semester} 已存在"})
+                    continue
+
+                score_obj = StudentScore(
+                    student_id=student_id,
+                    course_name=course_name,
+                    score=score_val,
+                    total_score=item.get("total_score"),
+                    pass_score=item.get("pass_score", 60.0),
+                    exam_type=exam_type,
+                    semester=semester,
+                    teacher_id=item.get("teacher_id"),
+                )
+                if exam_time:
+                    try:
+                        score_obj.exam_time = datetime.strptime(exam_time, "%Y-%m-%d")
+                    except ValueError:
+                        try:
+                            score_obj.exam_time = datetime.strptime(exam_time, "%Y-%m-%d %H:%M")
+                        except ValueError:
+                            pass
+
+                db.add(score_obj)
+                success += 1
+            except Exception as e:
+                fail += 1
+                errors.append({"row": i + 1, "reason": str(e)})
+
+        return {"success_count": success, "fail_count": fail, "errors": errors}
+
 
 class EmployeeCRUD:
     """员工数据访问对象"""
@@ -106,6 +178,17 @@ class EmployeeCRUD:
             SysUser.user_type == "EMPLOYEE",
             SysUser.delete_flag == 0
         ).first()
+
+    @staticmethod
+    def update(db: Session, employee_id: int, **kwargs):
+        """更新员工信息（仅更新非None字段）"""
+        employee = EmployeeCRUD.get_by_id(db, employee_id)
+        if not employee:
+            return None
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(employee, key, value)
+        return employee
 
 
 class DashboardCRUD:

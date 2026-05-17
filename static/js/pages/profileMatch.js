@@ -45,20 +45,20 @@ const ProfileMatchPage = (() => {
   }
 
   async function doMatch() {
-    const age = document.getElementById('pm-age').value;
+    const ageVal = document.getElementById('pm-age').value;
     const education = document.getElementById('pm-edu').value;
     const intended_country = document.getElementById('pm-country').value;
-    if (!age && !education && !intended_country) {
+    if (!ageVal && !education && !intended_country) {
       Toast.show('请至少填写一项信息', 'warning'); return;
     }
     const results = document.getElementById('match-results');
     results.innerHTML = '<div class="page-loading">匹配中...</div>';
     try {
-      const params = new URLSearchParams();
-      if (age) params.set('age', age);
-      if (education) params.set('education', education);
-      if (intended_country) params.set('intended_country', intended_country);
-      const data = await API.post(`/api/customer/profile-match?${params.toString()}`, null);
+      const body = {};
+      if (ageVal) body.age = parseInt(ageVal, 10);
+      if (education) body.education = education;
+      if (intended_country) body.intended_country = intended_country;
+      const data = await API.post('/api/customer/profile-match', body);
       const matches = data.matches || [];
       if (!matches.length) {
         results.innerHTML = '<div class="page-placeholder"><div class="placeholder-icon">🔍</div><h3>暂无匹配项目</h3><p>尝试调整筛选条件</p></div>';

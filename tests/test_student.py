@@ -23,8 +23,8 @@ class TestGetStudentInfo:
         data = resp.json()
         assert data["real_name"] == seed_student.real_name
 
-    def test_not_found(self, client, auth_headers_student):
-        resp = client.get("/api/student/info?student_id=99999", headers=auth_headers_student)
+    def test_not_found(self, client, auth_headers_employee):
+        resp = client.get("/api/student/info?student_id=99999", headers=auth_headers_employee)
         assert resp.status_code == 404
 
     def test_employee_not_student(self, client, seed_employee, auth_headers_employee):
@@ -151,8 +151,8 @@ class TestListLeaves:
         resp = client.get("/api/student/leave?student_id=abc", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_student_not_found(self, client, auth_headers_student):
-        resp = client.get("/api/student/leave?student_id=99999", headers=auth_headers_student)
+    def test_student_not_found(self, client, auth_headers_employee):
+        resp = client.get("/api/student/leave?student_id=99999", headers=auth_headers_employee)
         assert resp.status_code == 404
 
     def test_auth_required_401(self, client):
@@ -253,8 +253,8 @@ class TestListFeedback:
         resp = client.get("/api/student/feedback?student_id=abc", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_student_not_found(self, client, auth_headers_student):
-        resp = client.get("/api/student/feedback?student_id=99999", headers=auth_headers_student)
+    def test_student_not_found(self, client, auth_headers_employee):
+        resp = client.get("/api/student/feedback?student_id=99999", headers=auth_headers_employee)
         assert resp.status_code == 404
 
     def test_auth_required_401(self, client):
@@ -357,16 +357,16 @@ class TestCreatePsychAlert:
 
 
 class TestListPsychAlerts:
-    def test_list_all(self, client, auth_headers_student):
-        resp = client.get("/api/student/psych-alert", headers=auth_headers_student)
+    def test_list_all(self, client, auth_headers_employee):
+        resp = client.get("/api/student/psych-alert", headers=auth_headers_employee)
         assert resp.status_code == 200
 
-    def test_filter_by_risk_level(self, client, auth_headers_student):
-        resp = client.get("/api/student/psych-alert?risk_level=high", headers=auth_headers_student)
+    def test_filter_by_risk_level(self, client, auth_headers_employee):
+        resp = client.get("/api/student/psych-alert?risk_level=high", headers=auth_headers_employee)
         assert resp.status_code == 200
 
-    def test_invalid_risk_level_422(self, client, auth_headers_student):
-        resp = client.get("/api/student/psych-alert?risk_level=unknown", headers=auth_headers_student)
+    def test_invalid_risk_level_422(self, client, auth_headers_employee):
+        resp = client.get("/api/student/psych-alert?risk_level=unknown", headers=auth_headers_employee)
         assert resp.status_code == 422
 
     def test_auth_required_401(self, client):
@@ -396,8 +396,8 @@ class TestListAcademic:
         resp = client.get("/api/student/academic?student_id=abc", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_not_found_student(self, client, auth_headers_student):
-        resp = client.get("/api/student/academic?student_id=99999", headers=auth_headers_student)
+    def test_not_found_student(self, client, auth_headers_employee):
+        resp = client.get("/api/student/academic?student_id=99999", headers=auth_headers_employee)
         assert resp.status_code == 404
 
     def test_auth_required_401(self, client):
@@ -427,8 +427,8 @@ class TestListUpcomingAcademic:
         resp = client.get("/api/student/academic/upcoming", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_not_found_student(self, client, auth_headers_student):
-        resp = client.get("/api/student/academic/upcoming?student_id=99999", headers=auth_headers_student)
+    def test_not_found_student(self, client, auth_headers_employee):
+        resp = client.get("/api/student/academic/upcoming?student_id=99999", headers=auth_headers_employee)
         assert resp.status_code == 404
 
     def test_auth_required_401(self, client):
@@ -478,8 +478,8 @@ class TestListStudyAbroad:
         resp = client.get("/api/student/study-abroad", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_not_found_student(self, client, auth_headers_student):
-        resp = client.get("/api/student/study-abroad?student_id=99999", headers=auth_headers_student)
+    def test_not_found_student(self, client, auth_headers_employee):
+        resp = client.get("/api/student/study-abroad?student_id=99999", headers=auth_headers_employee)
         assert resp.status_code == 404
 
     def test_auth_required_401(self, client):
@@ -503,8 +503,8 @@ class TestGetCurrentStage:
         resp = client.get("/api/student/study-abroad/current", headers=auth_headers_student)
         assert resp.status_code == 422
 
-    def test_not_found_student(self, client, auth_headers_student):
-        resp = client.get("/api/student/study-abroad/current?student_id=99999", headers=auth_headers_student)
+    def test_not_found_student(self, client, auth_headers_employee):
+        resp = client.get("/api/student/study-abroad/current?student_id=99999", headers=auth_headers_employee)
         assert resp.status_code == 404
 
     def test_auth_required_401(self, client):

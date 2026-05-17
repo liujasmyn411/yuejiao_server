@@ -77,3 +77,34 @@ def require_employee_or_admin(
     if current_user.user_type not in ("EMPLOYEE", "ADMIN"):
         raise HTTPException(status_code=403, detail="仅员工/管理员可访问此接口")
     return current_user
+
+
+def get_optional_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
+    db: Session = Depends(get_db),
+):
+    """
+    可选登录：尝试解析 token，有则返回用户对象，无则返回 None。
+    用于统一聊天入口 —— 游客不登录也能用，但功能受限。
+    """
+    if credentials is None:
+        return None
+    payload = decode_access_token(credentials.credentials)
+    if payload is None:
+        return None
+    user_id = payload.get("sub")
+    if user_id is None:
+        return None
+    return UserCRUD.get_by_id(db, int(user_id))
+
+
+def enforce_self_only(current_user, target_user_id: int) -> None:
+    """
+    学生只能操作自己的数据，员工/管理员不受限。
+    违反时抛出 403。
+    """
+    if current_user.user_type == "STUDENT" and current_user.id != target_user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="仅可查看/操作自己的数据"
+        )

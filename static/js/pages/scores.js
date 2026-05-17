@@ -1,12 +1,17 @@
 /**
- * 成绩管理页 — 录入 + 按学生查询
+ * 成绩管理页 — 录入 + 查询 + 批量上传
  */
 const ScoresPage = (() => {
   function render() {
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const canManage = user.user_type === 'ADMIN' || user.user_type === 'EMPLOYEE';
     return `
       <div class="page-header flex-between">
         <h3 style="margin:0">📈 成绩管理</h3>
-        <button class="btn btn-primary" id="btn-add-score">+ 录入成绩</button>
+        <div style="display:flex;gap:8px">
+          ${canManage ? '<button class="btn btn-primary" id="btn-add-score">+ 录入成绩</button>' : ''}
+          ${canManage ? '<button class="btn" id="btn-batch-score" style="background:var(--color-primary-light);color:white">📤 批量导入</button>' : ''}
+        </div>
       </div>
       <div class="card mt-16">
         <div class="form-grid">
@@ -22,23 +27,75 @@ const ScoresPage = (() => {
       <div id="scores-table" class="table-container mt-16">
         <div class="page-loading">加载中...</div>
       </div>
+      <input type="file" id="batch-file-input" accept=".xlsx,.xls,.csv" style="display:none">
     `;
   }
 
   function onMount() {
-    document.getElementById('btn-add-score').onclick = openCreateModal;
+    const btnAdd = document.getElementById('btn-add-score');
+    if (btnAdd) btnAdd.onclick = openCreateModal;
+
+    const btnBatch = document.getElementById('btn-batch-score');
+    const batchInput = document.getElementById('batch-file-input');
+    if (btnBatch && batchInput) {
+      btnBatch.onclick = () => batchInput.click();
+      batchInput.onchange = () => {
+        const file = batchInput.files[0];
+        if (file) handleBatchUpload(file);
+        batchInput.value = '';
+      };
+    }
+
     document.getElementById('btn-query-score').onclick = () => {
       const studentId = document.getElementById('score-student-id').value;
       if (!studentId) { Toast.show('请输入学生ID', 'warning'); return; }
       load(studentId);
     };
-    // 如果是学生登录，自动查自己
     const user = JSON.parse(localStorage.getItem('user') || '{}');
     if (user.user_type === 'STUDENT') {
       document.getElementById('score-student-id').value = user.id;
       load(user.id);
     } else {
       document.getElementById('scores-table').innerHTML = '<div class="page-placeholder"><div class="placeholder-icon">📈</div><h3>请输入学生ID查询成绩</h3></div>';
+    }
+  }
+
+  async function handleBatchUpload(file) {
+    Modal.show({
+      title: '批量导入成绩',
+      body: `
+        <div style="text-align:center;padding:20px">
+          <p>正在上传文件 <strong>${esc(file.name)}</strong> ...</p>
+          <div class="page-loading" id="batch-loading">正在导入...</div>
+          <div id="batch-result" style="text-align:left"></div>
+        </div>
+      `,
+      confirmText: '关闭',
+      onConfirm: () => {},
+    });
+
+    try {
+      const data = await API.upload('/api/enterprise/score/batch', file);
+      const resultEl = document.getElementById('batch-result');
+      const loadingEl = document.getElementById('batch-loading');
+      if (loadingEl) loadingEl.classList.add('hidden');
+
+      let html = `<div class="mt-16"><strong>导入结果：</strong>成功 <span style="color:#16a34a">${data.success_count}</span> 条，失败 <span style="color:#dc2626">${data.fail_count}</span> 条</div>`;
+      if (data.errors && data.errors.length) {
+        html += `<details class="mt-16"><summary style="cursor:pointer">查看失败详情 (${data.errors.length}条)</summary><ul style="margin-top:8px">`;
+        data.errors.forEach(e => {
+          html += `<li style="color:#dc2626">第${e.row}行: ${esc(e.reason)}</li>`;
+        });
+        html += '</ul></details>';
+      }
+      if (resultEl) resultEl.innerHTML = html;
+      Toast.show(`导入完成：成功${data.success_count}条，失败${data.fail_count}条`, data.fail_count > 0 ? 'warning' : 'success');
+    } catch (e) {
+      const resultEl = document.getElementById('batch-result');
+      const loadingEl = document.getElementById('batch-loading');
+      if (loadingEl) loadingEl.classList.add('hidden');
+      if (resultEl) resultEl.innerHTML = `<div class="text-error">导入失败: ${e.message}</div>`;
+      Toast.show(e.message, 'error');
     }
   }
 

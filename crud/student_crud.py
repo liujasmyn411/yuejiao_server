@@ -243,6 +243,14 @@ class StudyAbroadCRUD:
     """留学业务进度数据访问对象"""
 
     @staticmethod
+    def get_by_id(db: Session, progress_id: int):
+        """根据ID查询留学进度记录"""
+        return db.query(StudentStudyAbroadProgress).filter(
+            StudentStudyAbroadProgress.id == progress_id,
+            StudentStudyAbroadProgress.delete_flag == 0
+        ).first()
+
+    @staticmethod
     def get_by_student(db: Session, student_id: int):
         """查询学生留学全流程进度（按阶段序号排列）"""
         return db.query(StudentStudyAbroadProgress).filter(
@@ -258,6 +266,24 @@ class StudyAbroadCRUD:
             StudentStudyAbroadProgress.is_current == 1,
             StudentStudyAbroadProgress.delete_flag == 0
         ).first()
+
+    @staticmethod
+    def update(db: Session, progress_id: int, **kwargs):
+        """更新留学进度记录（仅更新非None字段）"""
+        record = StudyAbroadCRUD.get_by_id(db, progress_id)
+        if not record:
+            return None
+        # 如果设置为当前阶段，先清除该学生其他记录的 is_current
+        if kwargs.get("is_current") == 1:
+            db.query(StudentStudyAbroadProgress).filter(
+                StudentStudyAbroadProgress.student_id == record.student_id,
+                StudentStudyAbroadProgress.id != progress_id,
+                StudentStudyAbroadProgress.delete_flag == 0,
+            ).update({"is_current": 0})
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(record, key, value)
+        return record
 
 
 class NotificationCRUD:

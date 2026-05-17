@@ -5,6 +5,8 @@ const ChatWidget = (() => {
   let currentUserId = null;
   let currentSessionId = null;   // 本次登录的会话ID，用于区分历史
   let historyVisible = false;
+  // 前端生成的匿名会话ID，用于隔离不同浏览器/标签页的对话状态
+  const chatSessionId = 'cs_' + (crypto.randomUUID ? crypto.randomUUID() : Date.now());
 
   const STORAGE_KEY = 'chat_history';
   const MAX_SESSIONS = 50;
@@ -234,7 +236,7 @@ const ChatWidget = (() => {
     appendMessage('assistant', '<span class="typing">正在思考...</span>');
 
     try {
-      const body = { message: text };
+      const body = { message: text, session_id: chatSessionId };
       if (currentUserId) body.student_id = currentUserId;
       const data = await API.post('/api/chat', body);
       // 移除 typing

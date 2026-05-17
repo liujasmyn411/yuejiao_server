@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from database import get_db
 from schemas import EventRegisterRequest
 from crud import EventCRUD, ProjectCRUD
-from utils.file_parser import parse_file, extract_profile_from_text
+from utils.file_parser import parse_file, extract_profile_from_text, assess_lead_intention
+from crud import CrmCRUD
 
 router = APIRouter(prefix="/api/customer", tags=["客服Agent"])
 
@@ -86,22 +87,40 @@ def list_projects(category: str = "", db: Session = Depends(get_db)):
 
 # ==================== 客户画像研判 ====================
 
+from pydantic import BaseModel as PydanticBaseModel
+
+class ProfileMatchRequest(PydanticBaseModel):
+    age: int | None = None
+    education: str = ""
+    intended_country: str = ""
+
+
 @router.post("/profile-match")
 def profile_match(
-    age: int = 0,
-    education: str = "",
-    intended_country: str = "",
+    req: ProfileMatchRequest | None = None,
+    age: int | None = None,   # query 参数兼容
+    education: str = "",      # query 参数兼容
+    intended_country: str = "",  # query 参数兼容
     db: Session = Depends(get_db)
 ):
     """根据客户画像匹配推荐项目
 
-    **参数说明**（均为 query 参数，可选填）:
+    **参数说明**（支持 JSON body 或 query 参数）:
     - **age**: 客户年龄，例如 20
     - **education**: 学历，可选值 — 初中 / 高中 / 职高 / 中专 / 大专 / 本科 / 硕士 / 博士
     - **intended_country**: 意向国家，可选值 — 新加坡 / 德国 / 英国 / 澳大利亚 / 美国 / 加拿大
 
     **计分规则**: 国家匹配 +30 / 学历匹配 +20 / 年龄匹配 +25
     """
+    # JSON body 优先，query 参数兜底
+    if req:
+        age = req.age if req.age is not None else age
+        education = req.education or education
+        intended_country = req.intended_country or intended_country
+    age = age or 0
+    education = education or ""
+    intended_country = intended_country or ""
+
     projects = ProjectCRUD.get_all(db)
     if not projects:
         return {"matches": [], "message": "暂无项目数据"}
@@ -202,14 +221,21 @@ def profile_match(
     return {"matches": matched[:5]}
 
 
-# ==================== 文件解析（客户画像研判） ====================
+# ==================== 文件解析（客户意向研判） ====================
 
 @router.post("/parse-file")
-async def parse_customer_file(file: UploadFile = File(...)):
-    """上传客户简历/信息文件（PDF/Excel/TXT），解析为文本用于画像研判
+async def parse_customer_file(
+    file: UploadFile = File(...),
+    owner_employee_id: int = Form(0),
+    db: Session = Depends(get_db),
+):
+    """上传客户简历/信息文件（PDF/Excel/TXT），自动研判客户意向
 
     支持格式：pdf / xlsx / xls / txt
-    会从文本中自动提取姓名、年龄、学历、意向国家、联系方式等关键字段
+    会根据 knowledge_base/data/用户研判规则 自动研判是否为意向客户。
+    如果是意向客户，自动写入 crm_lead 表。
+
+    - **owner_employee_id**: 可选，指定负责员工ID，默认0（未分配）
     """
     if not file.filename:
         raise HTTPException(status_code=400, detail="未选择文件")
@@ -225,6 +251,19 @@ async def parse_customer_file(file: UploadFile = File(...)):
     # 从解析文本中提取画像关键字段
     profile = extract_profile_from_text(result["text"]) if result["text"] else {}
 
+    # 调用统一研判函数
+    assessment = assess_lead_intention(profile)
+
+    lead_created = False
+    lead_id = None
+    if assessment["is_intended"] and assessment.get("lead_data"):
+        lead_data = assessment["lead_data"]
+        lead_data["owner_employee_id"] = owner_employee_id if owner_employee_id > 0 else 1
+        lead = CrmCRUD.create(db, **lead_data)
+        db.commit()
+        lead_created = True
+        lead_id = lead.id
+
     return {
         "success": True,
         "filename": result["filename"],
@@ -232,6 +271,14 @@ async def parse_customer_file(file: UploadFile = File(...)):
         "text": result["text"],
         "text_length": result["text_length"],
         "extracted_profile": profile,
+        "assessment": {
+            "is_intended": assessment["is_intended"],
+            "score": assessment["score"],
+            "matched_program": assessment["matched_program"],
+            "reasons": assessment["reasons"],
+            "lead_created": lead_created,
+            "lead_id": lead_id,
+        },
     }
 
 

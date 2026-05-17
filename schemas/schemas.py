@@ -476,3 +476,60 @@ class StudentStudyAbroadProgressSchema(BaseSchema):
 class StudyAbroadQueryRequest(BaseModel):
     """留学进度查询请求"""
     student_id: int
+
+
+# ==================== 扩展请求模型 ====================
+
+class StudyAbroadUpdateRequest(BaseModel):
+    """留学进度更新请求"""
+    target_country: Optional[str] = None
+    target_school: Optional[str] = None
+    target_major: Optional[str] = None
+    degree_level: Optional[str] = None
+    stage: Optional[str] = None
+    stage_order: Optional[int] = None
+    stage_status: Optional[str] = None
+    stage_detail: Optional[str] = None
+    handler_name: Optional[str] = None
+    handler_contact: Optional[str] = None
+    estimated_complete_date: Optional[str] = None
+    actual_complete_date: Optional[str] = None
+    is_current: Optional[int] = None
+
+
+class EmployeeUpdateRequest(BaseModel):
+    """员工信息更新请求"""
+    real_name: Optional[str] = None
+    department: Optional[str] = None
+    employee_role: Optional[str] = None
+    contact_info: Optional[str] = None
+    email: Optional[str] = None
+    status: Optional[str] = None
+
+
+class ProjectCreateRequest(BaseModel):
+    """课程项目创建请求"""
+    project_name: str
+    category: Optional[str] = ""
+    country: Optional[str] = ""
+    tuition_fee: Optional[str] = ""
+    duration: Optional[str] = ""
+    description: Optional[str] = ""
+    target_audience: Optional[str] = ""
+    application_require: Optional[str] = ""
+    is_recommended: Optional[int] = 0
+    age_min: Optional[int] = None
+    age_max: Optional[int] = None
+
+
+class ScoreBatchItem(BaseModel):
+    """成绩批量导入条目"""
+    student_id: int
+    course_name: str
+    score: float
+    total_score: Optional[float] = None
+    pass_score: Optional[float] = 60.0
+    exam_type: Optional[str] = ""
+    exam_time: Optional[str] = None
+    semester: Optional[str] = ""
+    teacher_id: Optional[int] = None

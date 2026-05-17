@@ -83,3 +83,11 @@ class ProjectCRUD:
         if category:
             query = query.filter(CourseProject.category == category)
         return query.order_by(CourseProject.sort_order).all()
+
+    @staticmethod
+    def delete(db: Session, project_id: int):
+        """软删除课程项目"""
+        project = ProjectCRUD.get_by_id(db, project_id)
+        if project:
+            project.delete_flag = 1
+        return project

@@ -18,6 +18,7 @@ class SlotState:
     missing: list = field(default_factory=list)     # 尚缺的字段名列表
     phase: str = "collecting"            # collecting → confirming → done
     confirmed: bool = False              # 用户已确认
+    confirm_retries: int = 0             # 确认阶段循环次数（防死循环）
     created_at: float = field(default_factory=time.time)
 
     # 取消关键词
@@ -27,6 +28,10 @@ class SlotState:
     # 确认关键词
     CONFIRM_KEYWORDS = ["确认", "是的", "对的", "没问题", "可以", "行", "好", "好的",
                         "嗯", "对", "是", "提交", "ok", "OK", "yes", "y"]
+
+    # 切换话题关键词 —— 用户明显想另起话题
+    SWITCH_TOPIC_KW = ["查询", "查看", "帮我查", "我想查", "成绩", "考试", "论文",
+                        "进度", "课程", "活动", "报名", "请假", "日报", "天气"]
 
     def is_complete(self) -> bool:
         return len(self.missing) == 0
@@ -124,16 +129,20 @@ class ConversationStateManager:
         self._states: dict[str, SlotState] = {}  # key: session_key → SlotState
         self._ttl = ttl_seconds
 
-    def _make_key(self, student_id: int = None, user_id: int = None) -> str:
+    def _make_key(self, student_id: int = None, user_id: int = None,
+                  session_id: str = None) -> str:
         if student_id:
             return f"student:{student_id}"
         if user_id:
             return f"user:{user_id}"
+        if session_id:
+            return f"session:{session_id}"
         return "anonymous"
 
-    def get(self, student_id: int = None, user_id: int = None) -> Optional[SlotState]:
+    def get(self, student_id: int = None, user_id: int = None,
+            session_id: str = None) -> Optional[SlotState]:
         """获取当前活跃的槽位填充状态，过期自动清除"""
-        key = self._make_key(student_id, user_id)
+        key = self._make_key(student_id, user_id, session_id)
         state = self._states.get(key)
         if state and time.time() - state.created_at > self._ttl:
             del self._states[key]
@@ -142,12 +151,12 @@ class ConversationStateManager:
 
     def start(self, intent: str, table_name: str, agent_type: str,
               student_id: int = None, user_id: int = None,
-              context: dict = None) -> SlotState:
+              session_id: str = None, context: dict = None) -> SlotState:
         """
         开始一个新的槽位填充会话。
         context: 可从请求上下文自动填充的字段（如 student_id, employee_id）
         """
-        key = self._make_key(student_id, user_id)
+        key = self._make_key(student_id, user_id, session_id)
         required = get_required_fields(table_name, context or {})
         collected = {}
         if context:
@@ -166,12 +175,14 @@ class ConversationStateManager:
         self._states[key] = state
         return state
 
-    def update(self, state: SlotState, student_id: int = None, user_id: int = None) -> None:
-        key = self._make_key(student_id, user_id)
+    def update(self, state: SlotState, student_id: int = None, user_id: int = None,
+               session_id: str = None) -> None:
+        key = self._make_key(student_id, user_id, session_id)
         self._states[key] = state
 
-    def clear(self, student_id: int = None, user_id: int = None) -> None:
-        key = self._make_key(student_id, user_id)
+    def clear(self, student_id: int = None, user_id: int = None,
+              session_id: str = None) -> None:
+        key = self._make_key(student_id, user_id, session_id)
         self._states.pop(key, None)
 
 

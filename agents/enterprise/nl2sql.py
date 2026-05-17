@@ -40,12 +40,17 @@ class NL2SQL:
         "LOAD_FILE", "SLEEP(", "BENCHMARK(", "WAITFOR",
     ]
 
-    def __init__(self):
+    def __init__(self, table_allowlist=None, prompt_template=None, update_whitelist=None):
         self.llm = get_llm_client()
+        if table_allowlist:
+            self.ALLOWED_TABLES = table_allowlist
+        if update_whitelist is not None:
+            self.UPDATE_WHITELIST = update_whitelist
+        self._prompt_template = prompt_template or NL2SQL_PROMPT
 
     def parse(self, natural_language: str) -> dict:
         """将自然语言转为SQL（含安全检查）"""
-        prompt = NL2SQL_PROMPT.format(user_input=natural_language)
+        prompt = self._prompt_template.format(user_input=natural_language)
         result = self.llm._call_api(
             [{"role": "user", "content": prompt}],
             temperature=0.1,
@@ -165,8 +170,11 @@ class NL2SQL:
         except Exception as e:
             raise RuntimeError(f"SQL执行失败: {e}")
 
-    def query(self, db, natural_language: str) -> dict:
-        """一步完成：解析 → 验证 → 执行 → 格式化结果（仅SELECT）"""
+    def query(self, db, natural_language: str, student_scope: int = None) -> dict:
+        """
+        一步完成：解析 → 验证 → 执行 → 格式化结果（仅SELECT）。
+        student_scope: 学生ID，传入时自动限制为只查该学生的数据。
+        """
         parsed = self.parse(natural_language)
         if "error" in parsed:
             return parsed
@@ -174,6 +182,10 @@ class NL2SQL:
         sql = parsed["sql"]
         if sql.upper().strip().startswith("UPDATE"):
             return {"error": "请使用update方法执行更新操作", "sql": sql}
+
+        # 学生范围限制：在 WHERE 中自动追加 student_id 条件
+        if student_scope is not None:
+            sql = self._apply_student_scope(sql, student_scope)
 
         try:
             rows = self.execute(db, sql)
@@ -186,6 +198,42 @@ class NL2SQL:
             }
         except Exception as e:
             return {"error": str(e), "sql": sql}
+
+    def _apply_student_scope(self, sql: str, student_id: int) -> str:
+        """
+        在 SELECT 语句中注入 student_id 条件，确保学生只能查自己的数据。
+        支持：已有 WHERE → 追加 AND；无 WHERE → 插入 WHERE。
+        """
+        import re
+        # 只对包含学生相关表的查询做限制
+        student_tables = {"student_score", "student_admin_service",
+                          "student_feedback_ticket", "student_academic",
+                          "student_study_abroad_progress"}
+        upper = sql.upper()
+        has_student_table = any(t in upper for t in student_tables)
+        if not has_student_table:
+            return sql  # 不涉及学生表，不加限制
+
+        scope_clause = f"student_id = {int(student_id)}"
+        # 尝试在 WHERE 后追加
+        where_match = re.search(r'\bWHERE\b\s+', sql, re.IGNORECASE)
+        if where_match:
+            pos = where_match.end()
+            # 找 WHERE 子句的结束位置（GROUP BY / ORDER BY / LIMIT / 语句末尾）
+            end_match = re.search(r'\b(GROUP\s+BY|ORDER\s+BY|LIMIT|HAVING)\b', sql[pos:], re.IGNORECASE)
+            if end_match:
+                end_pos = pos + end_match.start()
+                sql = sql[:end_pos] + f"({sql[pos:end_pos].strip()}) AND {scope_clause} " + sql[end_pos:]
+            else:
+                sql = sql[:pos] + f"({sql[pos:].strip()}) AND {scope_clause}"
+        else:
+            # 没有 WHERE 子句 → 在 ORDER BY / GROUP BY / LIMIT / 末尾之前插入
+            end_match = re.search(r'\b(ORDER\s+BY|GROUP\s+BY|LIMIT|HAVING)\b', sql, re.IGNORECASE)
+            if end_match:
+                sql = sql[:end_match.start()] + f" WHERE {scope_clause} " + sql[end_match.start():]
+            else:
+                sql = sql.rstrip(';').strip() + f" WHERE {scope_clause}"
+        return sql
 
     def update(self, db, natural_language: str) -> dict:
         """一步完成：解析 → 验证 → 执行UPDATE → 提交事务"""
