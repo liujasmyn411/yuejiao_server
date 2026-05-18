@@ -68,9 +68,21 @@ def update_lead(lead_id: int, req: LeadUpdateRequest, db: Session = Depends(get_
 def submit_report(req: ReportCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """提交员工日报"""
     data = req.model_dump(exclude_none=True)
-    if not data.get("report_date"):
-        from datetime import date
+    from datetime import date, datetime
+    # 规范化日期：字符串/非法格式统一转为 Python date 对象，兼容 SQLite + MySQL
+    report_date = data.get("report_date")
+    if report_date:
+        try:
+            data["report_date"] = datetime.strptime(str(report_date), "%Y-%m-%d").date()
+        except ValueError:
+            data["report_date"] = date.today()
+    else:
         data["report_date"] = date.today()
+    # 强制转换为字符串并截断，防止 LLM 返回数组导致数据库报错
+    if data.get("work_type") is not None:
+        data["work_type"] = str(data["work_type"])[:50]
+    if data.get("content") is not None:
+        data["content"] = str(data["content"])
     report = ReportCRUD.create(db, **data)
     db.commit()
     return {"success": True, "report_id": report.id, "message": "日报提交成功"}

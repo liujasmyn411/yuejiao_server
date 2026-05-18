@@ -113,6 +113,11 @@ class EnterpriseAgent:
         if any(kw in msg for kw in enterprise_allow):
             return None
 
+        # 如果包含明确的审批/管理动作词，视为管理操作而非学生专属操作
+        admin_action_keywords = ["通过", "驳回", "同意", "拒绝", "批准", "不批准", "处理", "解决"]
+        if any(kw in msg for kw in admin_action_keywords):
+            return None
+
         # 生成礼貌引导语
         guides = {
             "请假": "您是管理员/员工，无法直接提交请假申请。我可以帮您：\n  • 审批学生请假\n  • 查询请假记录\n  • 查看仪表盘数据",
@@ -647,6 +652,27 @@ class EnterpriseAgent:
                             }
                             for row in data:
                                 row.setdefault("status", status_map.get(row.get("id"), "未知"))
+                    except Exception as e:
+                        import logging
+                        logging.getLogger("yuejiao.agent").warning(f"状态补全失败: {e}")
+                else:
+                    # id 缺失时，尝试按内容模糊匹配补全状态（兜底）
+                    try:
+                        if is_feedback_query:
+                            from model import StudentFeedbackTicket
+                            all_tickets = db.query(StudentFeedbackTicket).filter(
+                                StudentFeedbackTicket.delete_flag == 0,
+                            ).order_by(StudentFeedbackTicket.create_time.desc()).limit(100).all()
+                            content_map = {t.content: t.status for t in all_tickets if t.content}
+                            for row in data:
+                                if not row.get("status"):
+                                    content = row.get("content", "")
+                                    for c, s in content_map.items():
+                                        if content and c and content in c:
+                                            row["status"] = s
+                                            break
+                                    if not row.get("status"):
+                                        row["status"] = "未知"
                     except Exception:
                         pass
 
@@ -752,6 +778,54 @@ class EnterpriseAgent:
 
         # ===== 有申请编号 → 直接审批 =====
         if request_id and approved is not None:
+            # 先尝试查找投诉/反馈工单（兼容直接输入编号未带关键词的场景）
+            from model import StudentFeedbackTicket
+            ticket = db.query(StudentFeedbackTicket).filter(
+                StudentFeedbackTicket.id == request_id,
+                StudentFeedbackTicket.delete_flag == 0,
+            ).first()
+
+            if ticket:
+                # 投诉/反馈工单处理
+                if ticket.status != "待处理":
+                    return f"工单 #{request_id} 状态为「{ticket.status}」，无法重复处理。"
+
+                new_status = "已处理" if approved else "已驳回"
+                ticket.status = new_status
+                if user_id:
+                    ticket.handle_user_id = user_id
+                if reason:
+                    ticket.solution = reason
+
+                student = db.query(SysUser).filter(
+                    SysUser.id == ticket.student_id,
+                    SysUser.delete_flag == 0,
+                ).first()
+                student_display = student.real_name if student else f"学生{ticket.student_id}"
+
+                NotificationCRUD.create(
+                    db,
+                    recipient_id=ticket.student_id,
+                    title=f"投诉/反馈已{new_status}",
+                    content=f"你的{ticket.feedback_type or '投诉/反馈'}工单 #{ticket.id} 已被管理员{new_status}。{'处理意见：' + reason if reason else ''}",
+                    notification_type="feedback_resolved",
+                    related_id=ticket.id,
+                )
+                db.commit()
+
+                status_icon = "✅" if approved else "❌"
+                lines = [
+                    f"{status_icon} 工单 #{request_id} {new_status}",
+                    f"",
+                    f"**学生**: {student_display}",
+                    f"**类型**: {ticket.feedback_type or '投诉/反馈'}",
+                    f"**内容**: {ticket.content or '无'}",
+                ]
+                if reason:
+                    lines.append(f"**处理意见**: {reason}")
+                return "\n".join(lines)
+
+            # 再查找请假申请
             record = db.query(StudentAdminService).filter(
                 StudentAdminService.id == request_id,
                 StudentAdminService.delete_flag == 0,
@@ -1315,9 +1389,9 @@ class EnterpriseAgent:
         cleaned = text.strip()
         # 阿拉伯数字格式
         patterns = [
-            r"^第?(\d+)[条个号位]?[。！.!]?$",
+            r"^(?:第)?(\d+)[条个号位]?(?:[。！.!\s]|$)",
             r"[「【\[\(\"'（(](\d+)[」】\]\"'）)]",
-            r"^(\d+)$",
+            r"^(\d+)(?:\s|$)",
         ]
         for p in patterns:
             m = re.search(p, cleaned)
@@ -1329,7 +1403,7 @@ class EnterpriseAgent:
             "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5,
             "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
         }
-        m = re.search(r"^第?([一二两三四五六七八九十]+)[条个号位]?[。！.!]?$", cleaned)
+        m = re.search(r"^(?:第)?([一二两三四五六七八九十]+)[条个号位]?(?:[。！.!\s]|$)", cleaned)
         if m:
             cn = m.group(1)
             if cn in cn_nums:
@@ -1381,6 +1455,14 @@ class EnterpriseAgent:
         elif selection_type == "approval":
             approved = state.extra.get("_approved")
             is_complaint = state.extra.get("_is_complaint", False)
+
+            # 如果状态中没有审批决定，尝试从用户输入中解析
+            if approved is None:
+                if any(kw in user_input for kw in ["通过", "同意", "批准", "准予"]):
+                    approved = True
+                elif any(kw in user_input for kw in ["驳回", "拒绝", "不通过", "打回"]):
+                    approved = False
+
             if approved is None:
                 # 还需要知道是通过还是驳回
                 state.extra["_selected_id"] = real_id

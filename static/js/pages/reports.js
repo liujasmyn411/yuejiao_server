@@ -87,6 +87,7 @@ const ReportsPage = (() => {
         const content = document.getElementById('rpt-content').value.trim();
         if (!content) { Toast.show('请输入日报内容', 'warning'); return; }
         const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (!user.id) { Toast.show('登录信息失效，请重新登录', 'error'); return; }
         try {
           await API.post('/api/enterprise/report', {
             employee_id: user.id,
@@ -142,15 +143,39 @@ const ReportsPage = (() => {
             `;
             document.getElementById('btn-submit-voice').onclick = async () => {
               const user = JSON.parse(localStorage.getItem('user') || '{}');
-              await API.post('/api/enterprise/report', {
-                employee_id: user.id,
-                report_date: r.report_date || new Date().toISOString().slice(0,10),
-                work_type: r.work_type || '其他',
-                content: [r.summary, r.todos].filter(Boolean).join('\n待办：'),
-              });
-              Toast.show('日报提交成功', 'success');
-              Modal.hide();
-              load();
+              if (!user.id) {
+                Toast.show('登录信息失效，请重新登录', 'error');
+                return;
+              }
+              // 规范化日期，防止 LLM 返回 "今天" 等非标准格式
+              let reportDate = r.report_date;
+              if (!reportDate || !/^\d{4}-\d{2}-\d{2}$/.test(reportDate)) {
+                reportDate = new Date().toISOString().slice(0, 10);
+              }
+              // 强制转换为字符串，防止 LLM 返回数组导致 422
+              const summaryStr = r.summary ? String(r.summary) : '';
+              const todosStr = Array.isArray(r.todos) ? r.todos.filter(Boolean).join('；') : (r.todos ? String(r.todos) : '');
+              const content = [summaryStr, todosStr].filter(Boolean).join('\n待办：');
+              if (!content.trim()) {
+                Toast.show('日报内容为空，无法提交', 'warning');
+                return;
+              }
+              const workTypeStr = Array.isArray(r.work_type)
+                ? r.work_type.filter(Boolean).join(',').slice(0, 50)
+                : String(r.work_type || '其他').slice(0, 50);
+              try {
+                await API.post('/api/enterprise/report', {
+                  employee_id: user.id,
+                  report_date: reportDate,
+                  work_type: workTypeStr,
+                  content: content,
+                });
+                Toast.show('日报提交成功', 'success');
+                Modal.hide();
+                load();
+              } catch (e) {
+                Toast.show('提交失败: ' + e.message, 'error');
+              }
             };
           } else {
             preview.innerHTML = '<div class="page-error">AI 解析失败，请重试</div>';

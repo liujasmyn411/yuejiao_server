@@ -2,6 +2,115 @@
 
 ---
 
+## 零、AI 范式与核心模式（1题）
+
+### Q0：这个项目体现了哪些 AI 相关的范式（如 RAG、Agent、NL2SQL 等）？
+
+**答：**
+
+本项目共体现了 **8 个核心 AI 范式**，覆盖从意图理解到知识检索、从自然语言查询到多轮对话的完整链路：
+
+---
+
+**1. Multi-Agent 协作（多智能体）**
+
+三个专业 Agent 分工协作：客服 Agent（访客/家长）、企业助手 Agent（员工/管理层）、学生助手 Agent（在册留学生）。顶层的 `chat_routes.py` 作为调度器，先用 LLM 做意图分类决定路由到哪个子 Agent，每个 Agent 再内部做二级意图路由到具体处理器。三个 Agent 共享 RAG 引擎、槽位填充管理器、NL2SQL 引擎和画像研判算法。
+
+---
+
+**2. RAG（检索增强生成）**
+
+自研的纯 Python 检索引擎（`knowledge_base/vectorizer.py`），零外部依赖：
+- **倒排索引** + **1~3 gram 分词** + **IDF 加权** + **覆盖率评分**（非向量检索，而是 BM25 风格的词汇检索）
+- **同义词展开**：52 条映射（如"多少钱"→"学费/费用/价格"），解决口语到书面语的匹配问题
+- **精确子串加分**：用户输入完全包含在 QA 问题中时额外加权
+- 评分公式：`覆盖率×0.45 + Jaccard×0.15 + 命中数加分 + 精确匹配加分`
+- 283 条 QA 对覆盖公司业务、留学政策、公司信息、新人指南四大领域
+
+不用向量数据库的理由：业务以结构化 FAQ 为主，关键词匹配已足够精准，零依赖便于部署。
+
+---
+
+**3. NL2SQL（自然语言转 SQL）**
+
+将用户自然语言转为 MySQL SELECT/UPDATE 语句，包含完整安全机制：
+- **表/列白名单**：SELECT 限 11 张表，UPDATE 限 4 张表的特定列
+- **强制约束**：UPDATE 必须有 WHERE + LIMIT，SELECT 必须加 `delete_flag=0`
+- **危险关键词拦截**：INSERT/DELETE/DROP/ALTER/TRUNCATE/CREATE 等一律拒绝
+- **学生数据隔离**：自动注入 `student_id = 当前用户ID` 到 WHERE 条件
+- Prompt 中嵌入完整数据库 schema 及字段中文含义
+
+---
+
+**4. Prompt Engineering（提示词工程）**
+
+系统多个模块依赖精心设计的 Prompt：
+- **角色设定**：「你是粤教服务的智能客服助手小粤」「你是留学生的心理健康关怀助手」
+- **输出格式约束**：「只返回 JSON，不要其他内容」——所有结构化输出都走 JSON 格式
+- **Few-shot 示例**：意图分类 Prompt 中包含 3 个输入→意图映射示例
+- **安全规则嵌入**：NL2SQL Prompt 包含表和列的白名单说明、危险操作禁止规则
+- **评估标准嵌入**：心理监测 Prompt 中写明了高/中/低风险级别的划分标准
+
+---
+
+**5. Intent Classification（意图识别）**
+
+双层意图分类机制：
+- **第一层（关键词快速路由）**：输入 < 4 字时直接查关键词表，毫秒级响应
+- **第二层（LLM 意图分类）**：构造包含意图列表 + 描述 + 示例的 Prompt，LLM 返回 `{intent, confidence, entities}` JSON
+- 三层意图空间：顶层路由 3 类 → 各 Agent 内部 9~10 种子意图，共 28 种意图
+- fallback 机制：LLM 不可用时降级为本地关键词打分分类
+
+---
+
+**6. Slot Filling / Dialogue State（槽位填充 / 多轮对话状态管理）**
+
+`ConversationStateManager` 实现对话状态跟踪：
+- **槽位定义**：每个意图定义必填字段（如请假需要 `leave_type, start_time, end_time, reason`）
+- **多轮收集**：状态机 `collecting → confirming → done`，逐槽收集缺失字段
+- **取消/确认检测**：「算了」「取消」→ 清除状态；「确认」「是的」→ 提交到数据库
+- **话题切换检测**：三层逃逸机制（关键词 + LLM 判断 + 交互次数上限 5 次）
+- **TTL 机制**：600 秒自动过期，防止僵尸状态
+
+---
+
+**7. Structured Output / LLM as Tool（LLM 作为结构化提取工具）**
+
+`LLMClient.extract_info()` 把 LLM 当作通用的信息提取工具：
+- 输入：用户自由文本 + 需要提取的字段列表
+- 输出：`{field1: value1, field2: value2, ...}` JSON
+- 用于画像提取（姓名/年龄/意向国家/语言水平）、请假信息提取、投诉内容结构化、日报摘要等 10+ 场景
+- 本质上等价于 Function Calling / Tool Use，通过 Prompt + JSON 约束实现
+
+---
+
+**8. Hybrid Rule + LLM（规则 + LLM 混合决策）**
+
+多个模块采用规则优先、LLM 兜底的混合策略：
+- **心理监测**：14 个高危词 + 28 个中危词关键词毫秒级检测 → 不够用时再调 LLM 深度评估
+- **画像研判**：年龄、学历、语言、经济四维评分算法（规则打分）→ 分数不足以判断时再用 LLM 分析
+- **话题切换检测**：关键词优先（毫秒级）→ 不确定时调 LLM 判断
+- **意图分类**：短输入关键词匹配优先 → 复杂输入调 LLM
+
+---
+
+**其他相关范式**（简要）：
+
+| 范式 | 体现位置 | 说明 |
+|------|---------|------|
+| **Chain-of-Thought** | `nl2sql.py` / `psych_monitor.py` | temperature=0.1 + 详细 Prompt 引导逐步推理 |
+| **LLM-as-Judge** | `chat_routes.py` 话题切换检测 / `agent.py` 反馈内容真实性判断 | 用 LLM 做二分类评估 |
+| **Proactive AI** | `scheduler.py` 定时任务 | 自动生成周报、DDL 提醒、跟进催办 |
+| **Graceful Degradation** | 所有 Agent | LLM 不可用时降级到本地规则/模板 |
+| **Report Generation** | `report_generator.py` | 5 类 AI 报告（客户分析/日报/周报/心理周报/投诉周报），LLM 生成 + 本地模板兜底 |
+| **Voice (ASR+TTS)** | `voice_processor.py` | Whisper 语音转文字 + TTS 文字转语音 |
+
+---
+
+**一句话总结**：项目以 **Multi-Agent + RAG + NL2SQL + Slot Filling** 四大范式为主干，**Prompt Engineering + Intent Classification + Structured Output** 为通用能力，**Hybrid Rule+LLM + Graceful Degradation** 为可靠性保障，形成了一个覆盖获客→管理→服务全链路的 AI Agent 系统。
+
+---
+
 ## 一、项目概述与架构设计（5题）
 
 ### Q1：请简要介绍你这个项目的核心定位和解决的问题？

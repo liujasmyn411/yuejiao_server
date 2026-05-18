@@ -86,14 +86,53 @@ class VoiceProcessor:
             ["日期", "工作类型", "客户名称列表", "待办事项"]
         )
 
+        # LLM 返回的字段可能为 list，统一转换为字符串，防止前端/后端 422
+        def _to_str(val, sep=","):
+            if val is None:
+                return ""
+            if isinstance(val, list):
+                return sep.join(str(v) for v in val if v is not None)
+            return str(val)
+
+        work_type = info.get("工作类型", "日常工作") or "日常工作"
         return {
-            "report_date": info.get("日期") or date.today().strftime("%Y-%m-%d"),
-            "work_type": info.get("工作类型", "日常工作"),
+            "report_date": self._normalize_date(info.get("日期")),
+            "work_type": _to_str(work_type, ","),
             "summary": result.strip(),
             "raw_text": oral_text,
-            "customers_mentioned": info.get("客户名称列表", ""),
-            "todos": info.get("待办事项", ""),
+            "customers_mentioned": _to_str(info.get("客户名称列表"), ","),
+            "todos": _to_str(info.get("待办事项"), "；"),
         }
+
+    @staticmethod
+    def _normalize_date(date_str) -> str:
+        """将 LLM 提取的日期规范化成 YYYY-MM-DD 格式"""
+        import re
+        from datetime import datetime, timedelta
+        if not date_str:
+            return date.today().strftime("%Y-%m-%d")
+        date_str = str(date_str).strip()
+        # 已经是标准格式
+        if re.match(r"^\d{4}-\d{2}-\d{2}$", date_str):
+            return date_str
+        today = date.today()
+        # 中文相对日期
+        if date_str in ("今天", "今日"):
+            return today.strftime("%Y-%m-%d")
+        if date_str in ("昨天", "昨日"):
+            return (today - timedelta(days=1)).strftime("%Y-%m-%d")
+        if date_str in ("明天", "明日"):
+            return (today + timedelta(days=1)).strftime("%Y-%m-%d")
+        # 尝试其他常见格式
+        for fmt in ("%Y年%m月%d日", "%Y/%m/%d", "%m月%d日", "%m-%d"):
+            try:
+                parsed = datetime.strptime(date_str, fmt)
+                if fmt in ("%m月%d日", "%m-%d"):
+                    parsed = parsed.replace(year=today.year)
+                return parsed.strftime("%Y-%m-%d")
+            except ValueError:
+                pass
+        return today.strftime("%Y-%m-%d")
 
     def summarize_reports(self, reports: list) -> str:
         """将多份日报汇总为周报/阶段总结"""
