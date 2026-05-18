@@ -26,7 +26,10 @@ router = APIRouter(prefix="/api/enterprise", tags=["企业智能助手"])
 @router.post("/lead")
 def create_lead(req: LeadCreateRequest, db: Session = Depends(get_db), current_user: SysUser = Depends(require_employee_or_admin)):
     """录入新意向客户"""
-    lead = CrmCRUD.create(db, **req.model_dump(exclude_none=True))
+    data = req.model_dump(exclude_none=True)
+    if not data.get("owner_employee_id"):
+        data["owner_employee_id"] = current_user.id
+    lead = CrmCRUD.create(db, **data)
     db.commit()
     return {"success": True, "lead_id": lead.id, "message": "客户录入成功"}
 

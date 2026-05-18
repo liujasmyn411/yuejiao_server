@@ -127,3 +127,132 @@ class TestUnifiedChat:
         """发送非 JSON body 返回 422。"""
         resp = client.post("/api/chat", content=b"not json", headers={"Content-Type": "application/json"})
         assert resp.status_code == 422
+
+
+class TestGuestEventRegistration:
+    """游客活动报名完整流程测试（多轮对话 + 数据落地）"""
+
+    def _clear_state(self, session_id: str):
+        from utils.conversation_state import get_conversation_state_manager
+        get_conversation_state_manager().clear(session_id=session_id)
+
+    def test_full_flow_bracket_number_creates_lead(self, client, db_session, seed_event):
+        """
+        游客输入「1」报名，走完姓名→联系方式→确认流程，
+        最终自动创建 CRM 意向客户并写入 event_registration。
+        """
+        self._clear_state("test-guest-001")
+        session_id = "test-guest-001"
+
+        with patch("api.chat_routes.get_llm_client") as mock_llm_factory, \
+             patch("agents.customer_service.agent.get_llm_client") as mock_agent_llm:
+
+            mock_llm = MagicMock()
+            mock_llm.classify_intent.return_value = {"intent": "event_registration", "confidence": 0.95}
+
+            def _extract(text, fields):
+                if "张三" in text:
+                    return {"姓名": "张三"}
+                if "138" in text:
+                    return {"联系方式": "13800138000"}
+                return {}
+
+            mock_llm.extract_info.side_effect = _extract
+            mock_llm_factory.return_value = mock_llm
+            mock_agent_llm.return_value = mock_llm
+
+            # 第1轮：触发报名
+            r1 = client.post("/api/chat", json={"message": "我想报名活动", "session_id": session_id})
+            assert r1.status_code == 200
+            assert "回复活动编号" in r1.json()["response"]
+
+            # 第2轮：回复「1」（带中文引号）
+            r2 = client.post("/api/chat", json={"message": "「1」", "session_id": session_id})
+            assert r2.status_code == 200
+            assert "姓名" in r2.json()["response"]
+
+            # 第3轮：提供姓名
+            r3 = client.post("/api/chat", json={"message": "张三", "session_id": session_id})
+            assert r3.status_code == 200
+            assert "联系方式" in r3.json()["response"]
+
+            # 第4轮：提供联系方式
+            r4 = client.post("/api/chat", json={"message": "13800138000", "session_id": session_id})
+            assert r4.status_code == 200
+            assert "确认" in r4.json()["response"]
+
+            # 第5轮：确认提交
+            r5 = client.post("/api/chat", json={"message": "确认", "session_id": session_id})
+            assert r5.status_code == 200
+            assert "报名成功" in r5.json()["response"]
+
+        # 验证数据库写入
+        from model import EventRegistration, CrmLead
+        reg = db_session.query(EventRegistration).filter(
+            EventRegistration.event_id == seed_event.id,
+            EventRegistration.contact == "13800138000",
+        ).first()
+        assert reg is not None, "event_registration 未写入"
+        assert reg.customer_name == "张三"
+        assert reg.customer_id is not None and reg.customer_id > 0, "customer_id 不应为 0"
+
+        lead = db_session.query(CrmLead).filter(CrmLead.id == reg.customer_id).first()
+        assert lead is not None, "crm_lead 未自动创建"
+        assert lead.customer_name == "张三"
+        assert lead.contact_info == "13800138000"
+        assert lead.source_channel == "活动报名-游客"
+
+    def test_duplicate_registration_blocked(self, client, db_session, seed_event):
+        """同一联系方式重复报名应被拦截"""
+        self._clear_state("test-guest-002")
+        session_id = "test-guest-002"
+
+        # 预写入一条报名记录
+        from model import EventRegistration
+        db_session.add(EventRegistration(
+            event_id=seed_event.id,
+            customer_id=999,
+            customer_name="已有用户",
+            contact="13900139000",
+        ))
+        db_session.commit()
+
+        with patch("api.chat_routes.get_llm_client") as mock_llm_factory, \
+             patch("agents.customer_service.agent.get_llm_client") as mock_agent_llm:
+
+            mock_llm = MagicMock()
+            mock_llm.classify_intent.return_value = {"intent": "event_registration", "confidence": 0.95}
+            mock_llm.extract_info.side_effect = lambda text, fields: {"姓名": "李四", "联系方式": "13900139000"} if "李四" in text or "139" in text else {}
+            mock_llm_factory.return_value = mock_llm
+            mock_agent_llm.return_value = mock_llm
+
+            # 快速走完流程到确认
+            client.post("/api/chat", json={"message": "报名活动", "session_id": session_id})
+            client.post("/api/chat", json={"message": "1", "session_id": session_id})
+            client.post("/api/chat", json={"message": "李四 13900139000", "session_id": session_id})
+            r = client.post("/api/chat", json={"message": "确认", "session_id": session_id})
+            assert r.status_code == 200
+            assert "已经报名过" in r.json()["response"]
+
+    def test_event_full_blocked(self, client, db_session, seed_event):
+        """活动已满员时报名应被拦截"""
+        self._clear_state("test-guest-003")
+        session_id = "test-guest-003"
+
+        seed_event.max_participants = 1
+        seed_event.current_participants = 1
+        db_session.flush()
+        db_session.commit()
+
+        with patch("api.chat_routes.get_llm_client") as mock_llm_factory, \
+             patch("agents.customer_service.agent.get_llm_client") as mock_agent_llm:
+
+            mock_llm = MagicMock()
+            mock_llm.classify_intent.return_value = {"intent": "event_registration", "confidence": 0.95}
+            mock_llm_factory.return_value = mock_llm
+            mock_agent_llm.return_value = mock_llm
+
+            client.post("/api/chat", json={"message": "报名活动", "session_id": session_id})
+            r = client.post("/api/chat", json={"message": "1", "session_id": session_id})
+            assert r.status_code == 200
+            assert "已满员" in r.json()["response"]

@@ -56,6 +56,11 @@ class Settings(BaseSettings):
     model_name: str = "gpt-4o-mini"
     openai_max_tokens: int = 2000
     openai_temperature: float = 0.7
+    llm_timeout: int = 60
+    llm_max_retries: int = 3
+
+    # ==================== 业务默认配置 ====================
+    default_crm_owner_id: int = 1  # 游客报名自动创建的意向客户归属员工ID
 
     model_config = {
         "env_file": ".env",

@@ -16,6 +16,7 @@ class SlotState:
     required_fields: dict                # 必填字段: {field_name: display_name}
     collected: dict = field(default_factory=dict)   # 已收集的字段值
     missing: list = field(default_factory=list)     # 尚缺的字段名列表
+    extra: dict = field(default_factory=dict)       # 额外上下文数据（如活动列表等）
     phase: str = "collecting"            # collecting → confirming → done
     confirmed: bool = False              # 用户已确认
     confirm_retries: int = 0             # 确认阶段循环次数（防死循环）
@@ -106,6 +107,11 @@ TABLE_REQUIRED_FIELDS: dict[str, dict[str, str]] = {
         "employee_id": "员工ID",
         "content": "日报内容",
     },
+    "event_registration": {
+        "event_id": "活动编号",
+        "customer_name": "姓名",
+        "contact": "联系方式",
+    },
 }
 
 # 意图 → 表名映射
@@ -114,6 +120,7 @@ INTENT_TO_TABLE: dict[str, str] = {
     "admin_service": "student_admin_service",
     "lead_create": "crm_lead",
     "daily_report": "employee_daily_report",
+    "event_registration": "event_registration",
 }
 
 

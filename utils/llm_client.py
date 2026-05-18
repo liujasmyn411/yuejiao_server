@@ -18,31 +18,39 @@ class LLMClient:
         self.temperature = getattr(settings, 'openai_temperature', 0.7)
 
     def _call_api(self, messages: list, temperature: float = None, max_tokens: int = None) -> str:
-        """调用 OpenAI 兼容接口"""
+        """调用 OpenAI 兼容接口（带重试与指数退避）"""
         if not self.api_key or self.api_key.startswith("sk-your-"):
-            return "[LLM未配置API Key，使用本地规则引擎]"
+            return "__LLM_ERROR__: API_KEY_NOT_CONFIGURED"
 
-        try:
-            resp = requests.post(
-                f"{self.api_base}/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "temperature": temperature or self.temperature,
-                    "max_tokens": max_tokens or self.max_tokens,
-                },
-                timeout=30,
-                proxies={"http": None, "https": None},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
-        except Exception as e:
-            return f"[LLM调用失败: {e}]"
+        import time
+        max_retries = 3
+        timeout = getattr(settings, 'llm_timeout', 60)
+
+        for attempt in range(max_retries):
+            try:
+                resp = requests.post(
+                    f"{self.api_base}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": messages,
+                        "temperature": temperature or self.temperature,
+                        "max_tokens": max_tokens or self.max_tokens,
+                    },
+                    timeout=timeout,
+                    proxies={"http": None, "https": None},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                return data["choices"][0]["message"]["content"]
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # 指数退避: 1s, 2s, 4s
+                    continue
+                return f"__LLM_ERROR__: {e}"
 
     def chat(self, system_prompt: str, user_message: str) -> str:
         """单轮对话"""

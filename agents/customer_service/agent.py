@@ -14,6 +14,7 @@ from utils.conversation_state import (
     get_conversation_state_manager, SlotState
 )
 from crud.customer_crud import EventCRUD
+from config import settings
 
 logger = logging.getLogger("yuejiao.customer_service")
 
@@ -28,13 +29,12 @@ class CustomerServiceAgent:
 
     # ==================== 意图路由 ====================
 
-    def route_intent(self, user_input: str, student_id: int = None, db=None) -> dict:
+    def route_intent(self, user_input: str, student_id: int = None, db=None,
+                      session_id: str = None, user_id: int = None) -> dict:
         """识别意图并路由到对应处理器"""
-        # 先用 LLM 做意图分类
         result = self.llm.classify_intent(user_input, INTENT_DESCRIPTIONS)
         intent = result.get("intent", "faq")
 
-        # 路由到处理器
         handlers = {
             "company_info": self._handle_company_info,
             "business_query": self._handle_business_query,
@@ -48,7 +48,10 @@ class CustomerServiceAgent:
         }
 
         handler = handlers.get(intent, self._handle_faq)
-        response = handler(user_input, result.get("entities", {}), student_id, db)
+        extra_kw = {}
+        if intent == "event_registration":
+            extra_kw = {"session_id": session_id, "user_id": user_id}
+        response = handler(user_input, result.get("entities", {}), student_id, db, **extra_kw)
         return {"intent": intent, "response": response, "confidence": result.get("confidence", 0.5)}
 
     # ==================== 意图处理器 ====================
@@ -104,13 +107,13 @@ class CustomerServiceAgent:
 请根据用户画像推荐最匹配的留学项目，说明推荐理由，并引导用户进一步咨询。"""
         return self.llm.chat(prompt, user_input)
 
-    def _handle_event_registration(self, user_input: str, entities: dict, student_id: int = None, db=None) -> str:
-        """活动报名引导 —— 查询数据库返回真实活动列表"""
+    def _handle_event_registration(self, user_input: str, entities: dict, student_id: int = None,
+                                     db=None, session_id: str = None, user_id: int = None) -> str:
+        """活动报名引导 —— 查询数据库返回真实活动列表，并保存状态等待用户选择"""
         if db is None:
             return "活动功能暂不可用，请稍后再试或联系客服~"
 
         all_events = EventCRUD.get_all(db)
-        # 只展示未结束的活动（报名中 / 未开始 / 进行中）
         events = [e for e in all_events if e.event_status not in ("已结束", "已取消")]
         if not events:
             return "目前暂无进行中的活动，请留意后续通知~\n你可以访问官网活动板块获取最新动态。"
@@ -130,7 +133,277 @@ class CustomerServiceAgent:
                 f"   报名截止：{end_time} | 已报名：{current}/{total}"
             )
         lines.append(f"\n共 {len(events)} 场活动，回复活动编号（如「1」）即可报名~")
+
+        # 保存会话状态，使用与 chat_routes 一致的 key（student_id + user_id + session_id）
+        stm = get_conversation_state_manager()
+        state = stm.start(
+            intent="event_registration",
+            table_name="event_registration",
+            agent_type="customer",
+            student_id=student_id,
+            user_id=user_id,
+            session_id=session_id,
+        )
+        state.extra["_event_ids"] = [e.id for e in events]
+        state.extra["_event_names"] = {str(i): e.event_name for i, e in enumerate(events, 1)}
+        stm.update(state, student_id=student_id, user_id=user_id, session_id=session_id)
+
         return "\n".join(lines)
+
+    def handle_event_selection(self, user_input: str, state: "SlotState",
+                                student_id: int = None, user_id: int = None,
+                                session_id: str = None, db=None) -> dict:
+        """处理活动编号选择 —— 多轮对话：选择活动 → 收集信息 → 确认 → 报名"""
+        stm = get_conversation_state_manager()
+        stripped = user_input.strip()
+
+        # 所有 stm 操作使用一致的 key
+        def _clear():
+            stm.clear(student_id=student_id, user_id=user_id, session_id=session_id)
+
+        def _update(s):
+            stm.update(s, student_id=student_id, user_id=user_id, session_id=session_id)
+
+        # 取消检测
+        if SlotState.is_cancel(stripped):
+            _clear()
+            return {
+                "intent": "event_registration",
+                "response": "好的，已取消活动报名。如有需要随时找我~",
+                "confidence": 0.95,
+            }
+
+        event_ids = state.extra.get("_event_ids", [])
+        event_names = state.extra.get("_event_names", {})
+
+        # 阶段1：还没选活动 → 尝试从输入中解析编号（支持「1」、【1】、[1] 等）
+        if "event_id" not in state.collected:
+            import re
+            idx = None
+            patterns = [
+                r"[「【\[\(\"'（(](\d+)[」】\]\"'）)]",
+                r"^第?(\d+)[个号位]?[。.]?$",
+                r"^(\d+)$",
+            ]
+            for p in patterns:
+                m = re.search(p, stripped)
+                if m:
+                    idx = int(m.group(1))
+                    break
+
+            if idx is None:
+                _clear()
+                return {
+                    "intent": "chitchat",
+                    "response": "请回复活动编号（如「1」「2」）来选择活动哦~ 输入「取消」可退出报名。",
+                    "confidence": 0.8,
+                }
+
+            if idx < 1 or idx > len(event_ids):
+                _clear()
+                return {
+                    "intent": "event_registration",
+                    "response": f"活动编号 {idx} 不存在，请输入 1-{len(event_ids)} 之间的编号~ 输入「取消」可退出报名。",
+                    "confidence": 0.9,
+                }
+
+            event_id = event_ids[idx - 1]
+            event_name = event_names.get(str(idx), "")
+
+            # 选中活动后立即检查是否已满
+            if db and EventCRUD.is_full(db, event_id):
+                _clear()
+                return {
+                    "intent": "event_registration",
+                    "response": f"抱歉，「{event_name}」已满员，请选择其他活动或关注后续安排~",
+                    "confidence": 0.9,
+                }
+
+            state.collect("event_id", event_id)
+            state.collected["_event_name"] = event_name
+            state.collected["_event_index"] = idx
+
+            # 已登录学生：自动填入姓名
+            if student_id and db:
+                from model import SysUser
+                user = db.query(SysUser).filter(SysUser.id == student_id).first()
+                if user:
+                    state.collect("customer_name", user.real_name or user.username)
+                    state.collect("contact", user.contact_info or user.email or "")
+
+            if state.is_complete():
+                state.phase = "confirming"
+                _update(state)
+                return {
+                    "intent": "event_registration",
+                    "response": (
+                        f"你选择了「{event_name}」\n\n"
+                        f"请确认报名信息：\n"
+                        f"  姓名：{state.collected.get('customer_name', '（未填）')}\n"
+                        f"  联系方式：{state.collected.get('contact', '（未填）')}\n\n"
+                        f"回复「确认」提交报名，或回复「取消」退出~"
+                    ),
+                    "confidence": 0.9,
+                }
+
+            _update(state)
+            next_field = state.next_missing_display()
+            return {
+                "intent": "event_registration",
+                "response": (
+                    f"你选择了「{event_name}」～\n"
+                    f"报名需要提供你的「{next_field}」，请告诉我~"
+                ),
+                "confidence": 0.9,
+            }
+
+        # 阶段2：收集信息（姓名/联系方式）
+        if state.phase == "collecting":
+            info = self.llm.extract_info(
+                stripped, ["姓名", "联系方式"]
+            )
+            name = info.get("姓名", "") or stripped
+            contact = info.get("联系方式", "")
+
+            if "customer_name" in state.missing and name.strip():
+                state.collect("customer_name", name.strip()[:30])
+            if "contact" in state.missing and contact and contact.strip():
+                state.collect("contact", contact.strip()[:20])
+
+            if state.is_complete():
+                state.phase = "confirming"
+                _update(state)
+                return {
+                    "intent": "event_registration",
+                    "response": (
+                        f"请确认报名信息：\n\n"
+                        f"  活动：{state.collected.get('_event_name', '')}\n"
+                        f"  姓名：{state.collected.get('customer_name', '')}\n"
+                        f"  联系方式：{state.collected.get('contact', '')}\n\n"
+                        f"回复「确认」提交报名，回复「取消」退出，或继续补充信息~"
+                    ),
+                    "confidence": 0.9,
+                }
+
+            _update(state)
+            return {
+                "intent": "event_registration",
+                "response": f"收到，还需要「{state.next_missing_display()}」，请提供~",
+                "confidence": 0.85,
+            }
+
+        # 阶段3：确认 → 写入数据库
+        if state.phase == "confirming":
+            if SlotState.is_confirm(stripped):
+                event_id = state.collected["event_id"]
+                contact = state.collected.get("contact", "")
+
+                if db:
+                    # 1. 满员二次检查
+                    if EventCRUD.is_full(db, event_id):
+                        _clear()
+                        return {
+                            "intent": "event_registration",
+                            "response": f"抱歉，「{state.collected.get('_event_name', '')}」刚满员了，报名失败。请关注其他活动~",
+                            "confidence": 0.95,
+                        }
+
+                    # 2. 重复报名检查
+                    if EventCRUD.check_duplicate(db, event_id, contact):
+                        _clear()
+                        return {
+                            "intent": "event_registration",
+                            "response": "你已经报名过该活动啦，无需重复报名~",
+                            "confidence": 0.95,
+                        }
+
+                # 3. 确定 customer_id：已登录用户直接用 ID，游客自动创建 CRM 意向客户
+                customer_id = student_id or user_id
+                if not customer_id and db:
+                    try:
+                        from crud.enterprise_crud import CrmCRUD
+                        lead = CrmCRUD.create(
+                            db,
+                            customer_name=state.collected.get("customer_name", "游客"),
+                            contact_info=contact,
+                            source_channel="活动报名-游客",
+                            status="新增意向",
+                            owner_employee_id=settings.default_crm_owner_id,
+                        )
+                        db.flush()
+                        customer_id = lead.id
+                    except Exception as e:
+                        logger.error("创建游客CRM意向客户失败: %s", e)
+                        _clear()
+                        return {
+                            "intent": "event_registration",
+                            "response": "报名失败：系统暂无法处理游客报名，请稍后重试或联系客服~",
+                            "confidence": 0.9,
+                        }
+
+                _clear()
+                if db:
+                    try:
+                        registration = EventCRUD.register(
+                            db,
+                            event_id=event_id,
+                            customer_id=customer_id,
+                            customer_name=state.collected.get("customer_name", "游客"),
+                            contact=contact,
+                        )
+                        db.commit()
+                        event_name = state.collected.get("_event_name", "")
+                        return {
+                            "intent": "event_registration",
+                            "response": (
+                                f"报名成功！🎉\n"
+                                f"你已成功报名「{event_name}」\n"
+                                f"报名编号：{registration.id}\n"
+                                f"活动开始前我们会通过你提供的联系方式通知你~"
+                            ),
+                            "confidence": 0.95,
+                        }
+                    except Exception as e:
+                        logger.error("活动报名失败: %s", e)
+                        return {
+                            "intent": "event_registration",
+                            "response": f"报名失败: {e}，请稍后重试或联系客服~",
+                            "confidence": 0.9,
+                        }
+                return {
+                    "intent": "event_registration",
+                    "response": "报名接口暂不可用，请稍后重试或联系客服~",
+                    "confidence": 0.8,
+                }
+
+            # 不是确认 → 当成补充信息
+            info = self.llm.extract_info(stripped, ["姓名", "联系方式"])
+            name = info.get("姓名", "") or stripped
+            contact = info.get("联系方式", "")
+            if name.strip():
+                state.collect("customer_name", name.strip()[:30])
+            if contact and contact.strip():
+                state.collect("contact", contact.strip()[:20])
+            state.phase = "confirming"
+            _update(state)
+            return {
+                "intent": "event_registration",
+                "response": (
+                    f"已更新。请再次确认：\n\n"
+                    f"  活动：{state.collected.get('_event_name', '')}\n"
+                    f"  姓名：{state.collected.get('customer_name', '')}\n"
+                    f"  联系方式：{state.collected.get('contact', '')}\n\n"
+                    f"回复「确认」提交报名~"
+                ),
+                "confidence": 0.9,
+            }
+
+        _clear()
+        return {
+            "intent": "chitchat",
+            "response": "报名流程已中断，有什么可以帮你的？",
+            "confidence": 0.8,
+        }
 
     def _handle_faq(self, user_input: str, entities: dict, student_id: int = None, db=None) -> str:
         """FAQ 检索"""

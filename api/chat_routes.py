@@ -2,6 +2,8 @@
 粤教服务 - 统一对话入口
 替代 Dify 顶级路由，将用户消息分发到对应的子Agent
 """
+import re
+
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -44,6 +46,21 @@ CUSTOMER_KW = ['项目', '课程', '费用', '学费', '报名', '活动', '讲�
 CHITCHAT_KW = ['天气', '吃饭', '电影', '音乐', '游戏', '运动', '周末', '干嘛', '无聊',
                '笑话', '故事', '新闻', '股票', '旅游', '爱好', '兴趣', '喜欢', '怎么样啊',
                '在吗', '在么', '你是谁', '你叫什么', '叫什么名字', '你能做什么', '你会什么']
+
+def _extract_event_index(text: str) -> int | None:
+    """从用户输入中提取活动编号，支持 1、「1」、【1】、[1]、第1个 等格式"""
+    cleaned = text.strip()
+    patterns = [
+        r"[「【\[\(\"'（(](\d+)[」】\]\"'）)]",
+        r"^第?(\d+)[个号位]?[。.]?$",
+        r"^(\d+)$",
+    ]
+    for p in patterns:
+        m = re.search(p, cleaned)
+        if m:
+            return int(m.group(1))
+    return None
+
 
 def _local_classify(message: str) -> str:
     """基于关键词的本地意图分类，返回 agent 类型"""
@@ -129,7 +146,28 @@ def chat(req: ChatRequest, db: Session = Depends(get_db),
             stm.clear(student_id=req.student_id, user_id=req.user_id,
                        session_id=req.session_id)
             agent = CustomerServiceAgent()
-            output = agent.route_intent(req.message, student_id=req.student_id, db=db)
+            output = agent.route_intent(
+                req.message, student_id=req.student_id, db=db,
+                session_id=req.session_id, user_id=req.user_id,
+            )
+            output["agent"] = "customer"
+            return output
+
+        # 列表选择等待状态：序号输入直接由 EnterpriseAgent 处理，跳过 LLM 复核
+        if active_state.extra.get("_awaiting_selection"):
+            agent = EnterpriseAgent()
+            output = agent.route_intent(req.message, db=db, user_id=current_user.id if current_user else None)
+            output["agent"] = "enterprise"
+            return output
+
+        # 活动报名流程：数字编号直接进入选择流程，跳过 LLM 复核
+        if active_state.intent == "event_registration" and _extract_event_index(req.message) is not None:
+            agent = CustomerServiceAgent()
+            output = agent.handle_event_selection(
+                message, active_state,
+                student_id=req.student_id, user_id=req.user_id,
+                session_id=req.session_id, db=db,
+            )
             output["agent"] = "customer"
             return output
 
@@ -138,11 +176,22 @@ def chat(req: ChatRequest, db: Session = Depends(get_db),
         if is_new_topic:
             stm.clear(student_id=req.student_id, user_id=req.user_id,
                        session_id=req.session_id)
-            # 状态已清除，agent_type 仍为 None，fall-through 到步骤1走正常路由
-
+            # 状态已清除，fall-through 到步骤1走正常路由
         else:
             # 有权访问 → 继续收集
             agent_type = active_state.agent_type
+
+            # 活动报名非数字输入（如提供姓名/联系方式）
+            if active_state.intent == "event_registration":
+                agent = CustomerServiceAgent()
+                output = agent.handle_event_selection(
+                    message, active_state,
+                    student_id=req.student_id, user_id=req.user_id,
+                    session_id=req.session_id, db=db,
+                )
+                output["agent"] = "customer"
+                return output
+
             if agent_type == "student":
                 agent = StudentAgent()
                 output = agent.continue_data_collection(
@@ -195,7 +244,10 @@ def chat(req: ChatRequest, db: Session = Depends(get_db),
         output["agent"] = "student"
     else:
         agent = CustomerServiceAgent()
-        output = agent.route_intent(req.message, student_id=req.student_id, db=db)
+        output = agent.route_intent(
+            req.message, student_id=req.student_id, db=db,
+            session_id=req.session_id, user_id=req.user_id,
+        )
         output["agent"] = "customer"
 
     return output

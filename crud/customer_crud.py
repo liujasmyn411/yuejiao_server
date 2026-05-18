@@ -57,6 +57,25 @@ class EventCRUD:
             EventRegistration.delete_flag == 0
         ).all()
 
+    @staticmethod
+    def check_duplicate(db: Session, event_id: int, contact: str) -> bool:
+        """检查同一联系方式是否已报名该活动"""
+        if not contact:
+            return False
+        return db.query(EventRegistration).filter(
+            EventRegistration.event_id == event_id,
+            EventRegistration.contact == contact,
+            EventRegistration.delete_flag == 0,
+        ).first() is not None
+
+    @staticmethod
+    def is_full(db: Session, event_id: int) -> bool:
+        """检查活动是否已满员"""
+        event = EventCRUD.get_by_id(db, event_id)
+        if not event or not event.max_participants:
+            return False
+        return (event.current_participants or 0) >= event.max_participants
+
 
 class ProjectCRUD:
     """课程项目数据访问对象"""

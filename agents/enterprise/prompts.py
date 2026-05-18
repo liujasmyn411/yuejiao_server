@@ -62,8 +62,9 @@ NL2SQL_PROMPT = """你是一个安全的NL2SQL转换器。将用户的自然语�
 ### student_score - 学生成绩表
 字段: id, student_id, course_name, score, total_score, pass_score, exam_type, exam_time, semester, teacher_id, create_time
 
-### student_admin_service - 行政服务表
-字段: id, student_id, service_type, leave_type, start_time, end_time, reason, status, reject_reason, approver_id, create_time
+### student_admin_service - 学生请假与服务申请表
+字段: id, student_id, service_type(取值:请假/讲座), leave_type, start_time, end_time, reason, status, reject_reason, approver_id, notify_status, delete_flag, create_time
+说明: 此表记录学生提交的行政服务申请。service_type='请假'为请假申请；service_type='讲座'为讲座相关服务申请。查询请假时必须带 service_type='请假'
 可UPDATE列: status, reject_reason, approver_id, notify_status
 
 ### student_feedback_ticket - 反馈工单表
@@ -80,8 +81,13 @@ NL2SQL_PROMPT = """你是一个安全的NL2SQL转换器。将用户的自然语�
 ### course_project - 课程项目表
 字段: id, project_name, category, country, tuition_fee, duration, description, target_audience
 
-### event_lecture - 活动讲座表
-字段: id, event_name, event_type, speaker, start_time, location, max_participants, current_participants, event_status
+### event_lecture - 活动讲座信息表
+字段: id, event_name, event_type, speaker, start_time, location, max_participants, current_participants, event_status, delete_flag, create_time
+说明: 此表存储讲座活动本身的信息（如讲座名称、时间、地点、主讲人等）
+
+### event_registration - 活动报名记录表
+字段: id, event_id, customer_id, customer_name, contact, status, check_in_status, check_in_time, delete_flag, create_time
+说明: 此表存储客户/学生报名参加讲座的记录。查"报名记录/谁报名了"时查此表，不要与 event_lecture 混淆
 
 ## 安全规则
 1. 默认生成 SELECT。仅当用户明确表达"修改/更新/改成/审批同意/驳回"意图且目标表在"可UPDATE列"列表中时，才生成UPDATE

@@ -65,7 +65,13 @@
       "Bash(python -c \"import sqlite3; conn = sqlite3.connect\\('yuejiao.db'\\); cursor = conn.execute\\(\\\\\"SELECT name FROM sqlite_master WHERE type='table'\\\\\"\\); print\\([r[0] for r in cursor.fetchall\\(\\)]\\); conn.close\\(\\)\")",
       "Bash(python -c \"import sqlite3; conn = sqlite3.connect\\('yuejiao.db'\\); cursor = conn.execute\\('SELECT id, username, user_type FROM sys_user WHERE delete_flag=0'\\); rows = cursor.fetchall\\(\\); print\\(rows if rows else 'NO USERS FOUND'\\); conn.close\\(\\)\")",
       "Bash(curl -s -X POST http://localhost:8000/api/login -H \"Content-Type: application/json\" -d \"{\\\\\"username\\\\\":\\\\\"admin\\\\\",\\\\\"password\\\\\":\\\\\"admin123\\\\\"}\")",
-      "Bash(curl -s -X POST http://localhost:8000/api/login -H \"Content-Type: application/json\" -d \"{\\\\\"username\\\\\":\\\\\"admin\\\\\",\\\\\"password\\\\\":\\\\\"wrong\\\\\"}\")"
+      "Bash(curl -s -X POST http://localhost:8000/api/login -H \"Content-Type: application/json\" -d \"{\\\\\"username\\\\\":\\\\\"admin\\\\\",\\\\\"password\\\\\":\\\\\"wrong\\\\\"}\")",
+      "Bash(mysql -u root -p123456 yuejiao -e \"DELETE FROM crm_lead WHERE id BETWEEN 1 AND 7;\")",
+      "Bash(mysql -u root -p123456 yuejiao -e ' *)",
+      "Bash(mysql -u root -p123456 yuejiao -e \"SELECT id, customer_name, status, score, JSON_LENGTH\\(follow_up_history\\) AS follow_up_count FROM crm_lead WHERE id BETWEEN 1 AND 7 ORDER BY id;\")",
+      "Bash(mysql -u root -p123456 --default-character-set=utf8mb4 yuejiao -e \"SELECT id, customer_name, status, score FROM crm_lead WHERE id BETWEEN 1 AND 7 ORDER BY id;\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('agents/enterprise/agent.py'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('agents/enterprise/agent.py', encoding='utf-8'\\).read\\(\\)\\); print\\('Syntax OK'\\)\")"
     ]
   }
 }

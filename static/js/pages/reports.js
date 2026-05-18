@@ -118,6 +118,7 @@ const ReportsPage = (() => {
         <div id="voice-preview"></div>
       `,
       confirmText: '生成日报预览',
+      autoClose: false,
       onConfirm: async () => {
         const text = document.getElementById('voice-text').value.trim();
         if (!text) { Toast.show('请输入口述内容', 'warning'); return; }
@@ -151,6 +152,8 @@ const ReportsPage = (() => {
               Modal.hide();
               load();
             };
+          } else {
+            preview.innerHTML = '<div class="page-error">AI 解析失败，请重试</div>';
           }
         } catch (e) {
           preview.innerHTML = `<div class="page-error">解析失败: ${e.message}</div>`;

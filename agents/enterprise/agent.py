@@ -3,6 +3,7 @@
 支持 NL2SQL / 日报 / CRM / 新人指引 等
 """
 import json
+import re
 from agents.enterprise.prompts import (
     SYSTEM_PROMPT, INTENT_DESCRIPTIONS, GUIDE_PROMPT, LEAD_PROFILE_PROMPT
 )
@@ -29,13 +30,25 @@ class EnterpriseAgent:
 
     def route_intent(self, user_input: str, db=None, user_id: int = None) -> dict:
         """识别意图并路由到对应处理器"""
+        stm = get_conversation_state_manager()
+        state = stm.get(user_id=user_id)
+
+        # 0. 如果有等待列表选择的状态，优先处理序号输入（如「第1条」「1」）
+        if state and state.extra.get("_awaiting_selection"):
+            idx = self._extract_ordinal_index(user_input)
+            if idx is not None:
+                return self._handle_selection_input(user_input, state, db, user_id)
+            # 用户没有回复有效序号，清除状态继续正常流程
+            stm.clear(user_id=user_id)
+
         # 短输入预检：≤3字且无明确业务关键词 → 直接闲聊
+        # （等待选择状态已在上面处理，不会走到这里）
         biz_keywords = ['客户', '查询', '日报', '审批', '仪表盘', '制度', '数据', '请假', '成绩',
                         '录入', '更新', '修改', '统计', '报告', '架构', '部门', '员工', '项目',
                         '姓名', '年龄', '学历', '画像', '研判', '意向', '家庭']
         stripped = user_input.strip()
         if len(stripped) <= 3 and not any(kw in stripped for kw in biz_keywords):
-            return {"intent": "chitchat", "response": self._handle_chitchat(stripped, {}, db), "confidence": 0.95}
+            return {"intent": "chitchat", "response": self._handle_chitchat(stripped, {}, db, user_id), "confidence": 0.95}
 
         # 学生专属操作拦截：管理员/员工试图执行仅学生可做的操作时，礼貌引导
         blocked = self._block_student_action(stripped)
@@ -59,13 +72,14 @@ class EnterpriseAgent:
             "data_query": self._handle_data_query,
             "company_guide": self._handle_company_guide,
             "approval": self._handle_approval,
+            "ticket_update": self._handle_ticket_update,
             "dashboard": self._handle_dashboard,
             "lead_profile": self._handle_lead_profile,
             "chitchat": self._handle_chitchat,
         }
 
         handler = handlers.get(intent, self._handle_chitchat)
-        if intent == "approval":
+        if intent in ("approval", "chitchat", "ticket_update", "daily_report"):
             response = handler(user_input, result.get("entities", {}), db, user_id)
         else:
             response = handler(user_input, result.get("entities", {}), db)
@@ -127,8 +141,8 @@ class EnterpriseAgent:
 
         # 查询动作词（能独立表明这是一个查询操作）
         query_actions = ["查询", "记录", "列表", "历史", "数据", "统计", "日报", "周报", "报表"]
-        # 审批动作词
-        approve_actions = ["审批", "通过", "驳回", "同意", "拒绝", "处理", "解决"]
+        # 审批动作词（含同义词扩展）
+        approve_actions = ["审批", "通过", "驳回", "同意", "拒绝", "处理", "解决", "批准", "准予", "不批准", "不同意", "打回"]
         # 业务对象
         biz_objects = ["请假", "投诉", "反馈", "成绩", "教务", "客户", "留学", "学生", "进度",
                        "工单", "报"]
@@ -139,6 +153,21 @@ class EnterpriseAgent:
         has_approve_action = any(kw in msg for kw in approve_actions)
         has_biz = any(kw in msg for kw in biz_objects)
         has_non_query = any(kw in msg for kw in non_query_actions)
+
+        # ===== 快捷处理待办 =====
+        # 处理投诉/跟进投诉/处理反馈 → 列出待处理投诉工单
+        if any(kw in msg for kw in ["处理投诉", "跟进投诉", "处理反馈", "跟进反馈", "处理工单", "跟进工单"]):
+            resp = self._handle_approval(user_input, {}, db, user_id)
+            return ("approval", resp)
+        # 审批请假/处理请假/查看请假 → 列出待审批请假
+        if any(kw in msg for kw in ["审批请假", "处理请假", "查看请假", "查看待审批"]):
+            resp = self._handle_approval(user_input, {}, db, user_id)
+            return ("approval", resp)
+
+        # ===== 工单状态更新 =====
+        if any(kw in msg for kw in ["更新", "修改", "设置", "改为"]) and any(kw in msg for kw in ["投诉", "反馈", "工单"]) and any(kw in msg for kw in ["状态", "为"]):
+            resp = self._handle_ticket_update(user_input, {}, db, user_id)
+            return ("ticket_update", resp)
 
         # 审批操作：审批动词 + 请假/投诉/反馈 对象
         if has_approve_action and any(kw in msg for kw in ["请假", "投诉", "反馈"]):
@@ -512,8 +541,8 @@ class EnterpriseAgent:
         else:
             return {"matched": False, "score": score, "reasons": reasons, "programs": []}
 
-    def _handle_daily_report(self, user_input: str, entities: dict, db) -> str:
-        """口述日报 → 结构化整理（槽位填充）"""
+    def _handle_daily_report(self, user_input: str, entities: dict, db, user_id: int = None) -> str:
+        """口述日报 → 结构化整理 → 存入会话状态等待确认提交"""
         stm = get_conversation_state_manager()
         report = self.voice.text_to_report(user_input)
 
@@ -526,16 +555,34 @@ class EnterpriseAgent:
                 intent="daily_report",
                 table_name="employee_daily_report",
                 agent_type="enterprise",
+                user_id=user_id,
                 context={},
             )
-            stm.update(state)
+            stm.update(state, user_id=user_id)
             return (
                 f"日报内容似乎不够详细，请多描述一下你今天的工作内容~\n"
                 f"比如：完成了什么任务、遇到了什么问题、明天的计划等。"
             )
 
+        # 内容充分 → 存入会话状态，进入确认阶段
+        state = stm.start(
+            intent="daily_report",
+            table_name="employee_daily_report",
+            agent_type="enterprise",
+            user_id=user_id,
+            context={"employee_id": user_id} if user_id else {},
+        )
+        state.missing = []
+        state.collected = {
+            "employee_id": user_id,
+            "content": summary,
+        }
+        state.extra["report_data"] = report
+        state.phase = "confirming"
+        stm.update(state, user_id=user_id)
+
         lines = [
-            "📋 日报已整理如下：",
+            "📋 日报已整理如下（AI润色后）：",
             f"日期: {report.get('report_date', '')}",
             f"类型: {report.get('work_type', '')}",
             "",
@@ -545,7 +592,7 @@ class EnterpriseAgent:
         todos = report.get("todos", "")
         if todos and todos != "None":
             lines.append(f"\n待办: {todos}")
-        lines.append("\n确认无误后可通过 POST /api/enterprise/report 提交。")
+        lines.append("\n回复「确认」提交这份日报，「取消」放弃，或继续补充内容~")
         return "\n".join(lines)
 
     def _handle_data_query(self, user_input: str, entities: dict, db) -> str:
@@ -570,16 +617,65 @@ class EnterpriseAgent:
                 return "查询失败，请尝试更具体的描述，如'查询所有新加坡意向的客户'或'查询本周的日报'。"
 
             data = result.get("data", [])
-            explanation = result.get("explanation", "")
+            sql = result.get("sql", "")
+            sql_lower = (sql or "").lower()
+            is_feedback_query = "student_feedback_ticket" in sql_lower
+            is_leave_query = "student_admin_service" in sql_lower
 
-            lines = [explanation] if explanation else ["查询结果："]
+            # 对反馈/请假查询补全状态字段（NL2SQL 可能漏选 status）
+            if db and data and (is_feedback_query or is_leave_query):
+                ids = [r.get("id") for r in data if r.get("id")]
+                if ids:
+                    try:
+                        if is_feedback_query:
+                            from model import StudentFeedbackTicket
+                            status_map = {
+                                t.id: t.status for t in
+                                db.query(StudentFeedbackTicket).filter(
+                                    StudentFeedbackTicket.id.in_(ids)
+                                ).all()
+                            }
+                            for row in data:
+                                row.setdefault("status", status_map.get(row.get("id"), "未知"))
+                        elif is_leave_query:
+                            from model import StudentAdminService
+                            status_map = {
+                                s.id: s.status for s in
+                                db.query(StudentAdminService).filter(
+                                    StudentAdminService.id.in_(ids)
+                                ).all()
+                            }
+                            for row in data:
+                                row.setdefault("status", status_map.get(row.get("id"), "未知"))
+                    except Exception:
+                        pass
+
+            lines = ["查询结果："]
             if not data:
                 lines.append("查询结果为空。")
             else:
                 lines.append(f"共 {len(data)} 条记录：")
-                for i, row in enumerate(data[:15], 1):
-                    values = ", ".join(f"{k}={v}" for k, v in list(row.items())[:6])
-                    lines.append(f"  {i}. {values}")
+                if is_feedback_query:
+                    for i, row in enumerate(data[:15], 1):
+                        status = row.get("status", "未知")
+                        status_icon = {"待处理": "⏳", "已处理": "✅", "已跟进": "📝", "处理中": "🔧", "已解决": "✅"}.get(status, "")
+                        content = row.get("content", "") or ""
+                        student_id = row.get("student_id", "")
+                        fb_type = row.get("feedback_type", "投诉")
+                        lines.append(f"  {i}. {status_icon} [#{row.get('id', '?')}] 学生:{student_id} | {fb_type} | {content[:30]}{'...' if len(content) > 30 else ''} | 状态:{status}")
+                elif is_leave_query:
+                    for i, row in enumerate(data[:15], 1):
+                        status = row.get("status", "未知")
+                        status_icon = {"待审批": "⏳", "已通过": "✅", "已驳回": "❌"}.get(status, "")
+                        student_id = row.get("student_id", "")
+                        leave_type = row.get("leave_type", "请假")
+                        start = str(row.get("start_time", ""))[:16]
+                        end = str(row.get("end_time", ""))[:16]
+                        lines.append(f"  {i}. {status_icon} [#{row.get('id', '?')}] 学生:{student_id} | {leave_type} | {start}~{end} | 状态:{status}")
+                else:
+                    for i, row in enumerate(data[:15], 1):
+                        values = ", ".join(f"{k}={v}" for k, v in list(row.items())[:6])
+                        lines.append(f"  {i}. {values}")
                 if len(data) > 15:
                     lines.append(f"  ... 还有 {len(data) - 15} 条")
             return "\n".join(lines)
@@ -772,18 +868,89 @@ class EnterpriseAgent:
                 lines = [
                     f"{student.real_name} 有 {len(pending)} 条待审批请假申请：",
                     f"",
-                    f"请指定申请编号后重试，例如「通过请假申请 #{pending[0].id}」",
-                    f"",
                 ]
+                index_map = {}
                 for i, p in enumerate(pending, 1):
                     start = str(p.start_time)[:16] if p.start_time else "?"
                     end = str(p.end_time)[:16] if p.end_time else "?"
-                    lines.append(f"  #{p.id} [{p.leave_type or '请假'}] {start} ~ {end} — {p.reason or '无理由'}")
+                    lines.append(f"  {i}. [#{p.id}] [{p.leave_type or '请假'}] {start} ~ {end} — {p.reason or '无理由'}")
+                    index_map[i] = p.id
+                
+                # 保存等待选择状态
+                stm = get_conversation_state_manager()
+                s = stm.start(
+                    intent="approval",
+                    table_name="",
+                    agent_type="enterprise",
+                    user_id=user_id,
+                    context={},
+                )
+                s.phase = "awaiting_selection"
+                s.extra["_awaiting_selection"] = True
+                s.extra["_selection_type"] = "approval"
+                s.extra["_index_to_id"] = index_map
+                s.extra["_approved"] = approved
+                s.extra["_is_complaint"] = False
+                stm.update(s, user_id=user_id)
+                
+                lines.append(f"")
+                lines.append("请回复序号（如「1」或「第1条」）选择要审批的申请。")
                 return "\n".join(lines)
 
-        # ===== 没有明确审批决定或有学生姓名但未指定决定 → 列出待审批列表 =====
+        # ===== 没有明确审批决定或有学生姓名但未指定决定 → 列出待处理列表 =====
         if not student_name and approved is None:
-            # 查询所有待审批请假
+            # 投诉/反馈工单列表
+            if is_complaint:
+                from model import StudentFeedbackTicket
+                pending = db.query(StudentFeedbackTicket).filter(
+                    StudentFeedbackTicket.status == "待处理",
+                    StudentFeedbackTicket.delete_flag == 0,
+                ).order_by(StudentFeedbackTicket.create_time.desc()).limit(20).all()
+
+                if not pending:
+                    return (
+                        "📭 当前没有待处理的投诉/反馈工单。\n\n"
+                        "处理操作示例：\n"
+                        "  • 「通过投诉 #3」— 按编号处理\n"
+                        "  • 「处理李四的投诉」— 按学生姓名处理\n"
+                        "  • 「查看待处理投诉」— 列出所有待处理工单"
+                    )
+
+                lines = [f"📋 当前共有 {len(pending)} 条待处理投诉/反馈工单：", ""]
+                index_map = {}
+                for i, p in enumerate(pending[:15], 1):
+                    student = db.query(SysUser).filter(
+                        SysUser.id == p.student_id, SysUser.delete_flag == 0
+                    ).first()
+                    name = student.real_name if student else f"学生{p.student_id}"
+                    urgency = p.urgency_level or "中"
+                    lines.append(f"  {i}. [#{p.id}] {name} [{p.feedback_type or '投诉'}] 紧急度:{urgency} | {p.content[:30]}...")
+                    index_map[i] = p.id
+                if len(pending) > 15:
+                    lines.append(f"  ... 还有 {len(pending) - 15} 条")
+                
+                # 保存等待选择状态
+                stm = get_conversation_state_manager()
+                s = stm.start(
+                    intent="approval",
+                    table_name="",
+                    agent_type="enterprise",
+                    user_id=user_id,
+                    context={},
+                )
+                s.phase = "awaiting_selection"
+                s.extra["_awaiting_selection"] = True
+                s.extra["_selection_type"] = "approval"
+                s.extra["_index_to_id"] = index_map
+                s.extra["_approved"] = None
+                s.extra["_is_complaint"] = True
+                stm.update(s, user_id=user_id)
+                
+                lines.append("")
+                lines.append("请回复序号（如「1」或「第1条」）选择要处理的工单，并说明「通过」或「驳回」。")
+                return "\n".join(lines)
+
+            # 请假审批列表
             pending = db.query(StudentAdminService).filter(
                 StudentAdminService.status == "待审批",
                 StudentAdminService.delete_flag == 0,
@@ -800,18 +967,38 @@ class EnterpriseAgent:
                 )
 
             lines = [f"📋 当前共有 {len(pending)} 条待审批请假申请：", ""]
-            for p in pending[:15]:
+            index_map = {}
+            for i, p in enumerate(pending[:15], 1):
                 student = db.query(SysUser).filter(
                     SysUser.id == p.student_id, SysUser.delete_flag == 0
                 ).first()
                 name = student.real_name if student else f"学生{p.student_id}"
                 start = str(p.start_time)[:16] if p.start_time else "?"
                 end = str(p.end_time)[:16] if p.end_time else "?"
-                lines.append(f"  #{p.id} {name} [{p.leave_type or '请假'}] {start} ~ {end}")
+                lines.append(f"  {i}. [#{p.id}] {name} [{p.leave_type or '请假'}] {start} ~ {end}")
+                index_map[i] = p.id
             if len(pending) > 15:
                 lines.append(f"  ... 还有 {len(pending) - 15} 条")
+            
+            # 保存等待选择状态
+            stm = get_conversation_state_manager()
+            s = stm.start(
+                intent="approval",
+                table_name="",
+                agent_type="enterprise",
+                user_id=user_id,
+                context={},
+            )
+            s.phase = "awaiting_selection"
+            s.extra["_awaiting_selection"] = True
+            s.extra["_selection_type"] = "approval"
+            s.extra["_index_to_id"] = index_map
+            s.extra["_approved"] = None
+            s.extra["_is_complaint"] = False
+            stm.update(s, user_id=user_id)
+            
             lines.append(f"")
-            lines.append(f"请告诉我你想审批哪一条，例如「通过请假申请 #{pending[0].id}」或「通过{student_name or '某学生'}的请假」")
+            lines.append("请回复序号（如「1」或「第1条」）选择要审批的申请，并说明「通过」或「驳回」。")
             return "\n".join(lines)
 
         # ===== 有审批决定但缺少目标 → 引导 =====
@@ -830,6 +1017,184 @@ class EnterpriseAgent:
             f"  • 「通过请假申请 #3」— 按申请编号审批\n"
             f"  • 「驳回李四的请假，原因：理由不充分」— 驳回\n"
             f"  • 「查看待审批请假」— 列出所有待审批申请"
+        )
+
+    def _handle_ticket_update(self, user_input: str, entities: dict, db, user_id: int = None) -> str:
+        """投诉/反馈工单状态更新（非审批类，如更新为已跟进/处理中）"""
+        if not db:
+            return "数据库不可用，请稍后重试。"
+
+        info = self.llm.extract_info(
+            user_input,
+            ["学生姓名", "工单编号", "新状态", "更新原因"]
+        )
+
+        student_name = info.get("学生姓名", "")
+        ticket_id_str = info.get("工单编号", "")
+        new_status = info.get("新状态", "")
+        update_reason = info.get("更新原因", "")
+
+        # 尝试从输入中提取编号
+        ticket_id = None
+        if ticket_id_str:
+            try:
+                ticket_id = int(ticket_id_str.strip().lstrip("#"))
+            except ValueError:
+                pass
+        if not ticket_id:
+            id_matches = re.findall(r'#?(\d+)', user_input)
+            if id_matches:
+                ticket_id = int(id_matches[0])
+
+        # 状态白名单
+        ALLOWED_STATUS = {"已跟进", "处理中", "已处理", "已解决"}
+
+        # 如果LLM没提取到状态，尝试从原文匹配
+        if not new_status or new_status not in ALLOWED_STATUS:
+            for status in ALLOWED_STATUS:
+                if status in user_input:
+                    new_status = status
+                    break
+
+        if not new_status:
+            return (
+                "请说明要更新为哪种状态。支持的状态：\n"
+                "  • 已跟进\n"
+                "  • 处理中\n"
+                "  • 已处理\n"
+                "  • 已解决\n\n"
+                "例如：「把李四的投诉状态更新为已跟进」"
+            )
+
+        if new_status not in ALLOWED_STATUS:
+            return f"不支持的状态「{new_status}」，仅支持：已跟进、处理中、已处理、已解决。"
+
+        from model import StudentFeedbackTicket, SysUser
+        from crud import NotificationCRUD
+
+        # ===== 按编号查找 =====
+        if ticket_id:
+            ticket = db.query(StudentFeedbackTicket).filter(
+                StudentFeedbackTicket.id == ticket_id,
+                StudentFeedbackTicket.delete_flag == 0,
+            ).first()
+            if not ticket:
+                return f"工单 #{ticket_id} 不存在或已删除。"
+        # ===== 按学生姓名查找 =====
+        elif student_name:
+            students = db.query(SysUser).filter(
+                SysUser.real_name.like(f"%{student_name}%"),
+                SysUser.delete_flag == 0,
+            ).all()
+            if not students:
+                return f"未找到姓名为「{student_name}」的学生，请确认姓名是否正确。"
+            if len(students) > 1:
+                names = ", ".join(f"{s.real_name}(ID:{s.id})" for s in students[:5])
+                return f"找到多个匹配的学生: {names}\n请指定具体的工单编号后重试。"
+
+            student = students[0]
+            tickets = db.query(StudentFeedbackTicket).filter(
+                StudentFeedbackTicket.student_id == student.id,
+                StudentFeedbackTicket.delete_flag == 0,
+            ).order_by(StudentFeedbackTicket.create_time.desc()).all()
+
+            if not tickets:
+                return f"{student.real_name} 目前没有投诉/反馈工单。"
+            if len(tickets) == 1:
+                ticket = tickets[0]
+            else:
+                # 多条工单 → 列出并保存等待选择状态
+                lines = [f"{student.real_name} 有 {len(tickets)} 条工单，请回复序号选择：", ""]
+                index_map = {}
+                for i, t in enumerate(tickets[:10], 1):
+                    status_icon = {"待处理": "⏳", "已处理": "✅", "已跟进": "📝", "处理中": "🔧", "已解决": "✅"}.get(t.status, "")
+                    lines.append(f"  {i}. {status_icon} [#{t.id}] {t.content[:30]}{'...' if len(t.content or '') > 30 else ''} | 状态: {t.status}")
+                    index_map[i] = t.id
+                lines.append("")
+                lines.append(f"请回复序号（如「1」或「第1条」），我会将对应工单状态改为「{new_status}」")
+                
+                s = stm.start(
+                    intent="ticket_update",
+                    table_name="",
+                    agent_type="enterprise",
+                    user_id=user_id,
+                    context={},
+                )
+                s.phase = "awaiting_selection"
+                s.extra["_awaiting_selection"] = True
+                s.extra["_selection_type"] = "ticket_update"
+                s.extra["_index_to_id"] = index_map
+                s.extra["_new_status"] = new_status
+                s.extra["_original_input"] = user_input
+                stm.update(s, user_id=user_id)
+                return "\n".join(lines)
+        else:
+            # 无姓名无编号 → 列出最近工单供选择
+            tickets = db.query(StudentFeedbackTicket).filter(
+                StudentFeedbackTicket.delete_flag == 0,
+            ).order_by(StudentFeedbackTicket.create_time.desc()).limit(10).all()
+            
+            if not tickets:
+                return "当前系统中没有投诉/反馈工单。"
+            
+            lines = [f"📋 当前共有 {len(tickets)} 条工单，请回复序号选择：", ""]
+            index_map = {}
+            for i, t in enumerate(tickets[:10], 1):
+                student = db.query(SysUser).filter(SysUser.id == t.student_id, SysUser.delete_flag == 0).first()
+                name = student.real_name if student else f"学生{t.student_id}"
+                status_icon = {"待处理": "⏳", "已处理": "✅", "已跟进": "📝", "处理中": "🔧", "已解决": "✅"}.get(t.status, "")
+                lines.append(f"  {i}. {status_icon} [#{t.id}] {name} | {t.feedback_type or '投诉'} | {t.content[:30]}{'...' if len(t.content or '') > 30 else ''} | 状态: {t.status}")
+                index_map[i] = t.id
+            
+            s = stm.start(
+                intent="ticket_update",
+                table_name="",
+                agent_type="enterprise",
+                user_id=user_id,
+                context={},
+            )
+            s.phase = "awaiting_selection"
+            s.extra["_awaiting_selection"] = True
+            s.extra["_selection_type"] = "ticket_update"
+            s.extra["_index_to_id"] = index_map
+            s.extra["_new_status"] = new_status
+            s.extra["_original_input"] = user_input
+            stm.update(s, user_id=user_id)
+            
+            lines.append("")
+            lines.append(f"请回复序号（如「1」或「第1条」），我会将对应工单状态改为「{new_status}」")
+            return "\n".join(lines)
+
+        # ===== 执行更新 =====
+        old_status = ticket.status or "待处理"
+        if old_status == new_status:
+            return f"工单 #{ticket.id} 当前已经是「{new_status}」状态，无需重复更新。"
+
+        ticket.status = new_status
+        if user_id:
+            ticket.handle_user_id = user_id
+
+        # 通知学生
+        NotificationCRUD.create(
+            db,
+            recipient_id=ticket.student_id,
+            title="投诉/反馈状态已更新",
+            content=f"你的投诉/反馈工单 #{ticket.id} 状态已由「{old_status}」更新为「{new_status}」。{update_reason or ''}",
+            notification_type="feedback_resolved",
+            related_id=ticket.id,
+        )
+        db.commit()
+
+        student = db.query(SysUser).filter(SysUser.id == ticket.student_id).first()
+        student_display = student.real_name if student else f"学生{ticket.student_id}"
+
+        return (
+            f"✅ 工单 #{ticket.id} 状态已更新\n"
+            f"\n"
+            f"**学生**: {student_display}\n"
+            f"**原状态**: {old_status}\n"
+            f"**新状态**: {new_status}\n"
+            f"**内容摘要**: {ticket.content[:40] if ticket.content else '无'}..."
         )
 
     def _handle_dashboard(self, user_input: str, entities: dict, db) -> str:
@@ -852,16 +1217,49 @@ class EnterpriseAgent:
         except Exception as e:
             return f"获取仪表盘数据失败: {e}"
 
-    def _handle_chitchat(self, user_input: str, entities: dict, db) -> str:
-        """日常闲聊"""
+    def _get_pending_summary(self, db) -> dict:
+        """查询全部待处理事项：待处理投诉 + 待审批请假"""
+        if not db:
+            return {"tickets": 0, "leaves": 0}
+        try:
+            from model import StudentFeedbackTicket, StudentAdminService
+            pending_tickets = db.query(StudentFeedbackTicket).filter(
+                StudentFeedbackTicket.status == "待处理",
+                StudentFeedbackTicket.delete_flag == 0,
+            ).count()
+            pending_leaves = db.query(StudentAdminService).filter(
+                StudentAdminService.status == "待审批",
+                StudentAdminService.delete_flag == 0,
+            ).count()
+            return {"tickets": pending_tickets, "leaves": pending_leaves}
+        except Exception:
+            return {"tickets": 0, "leaves": 0}
+
+    def _handle_chitchat(self, user_input: str, entities: dict, db, user_id: int = None) -> str:
+        """日常闲聊 —— 如果有待处理事项，主动附加询问"""
         prompt = "你是粤教服务的企业助手，用轻松专业的语气和同事聊天。回复控制在2-3句话。"
         try:
             result = self.llm.chat(prompt, user_input)
             if result.startswith("[LLM"):
-                return self._local_chitchat(user_input)
-            return result
+                response = self._local_chitchat(user_input)
+            else:
+                response = result
         except Exception:
-            return self._local_chitchat(user_input)
+            response = self._local_chitchat(user_input)
+
+        # 主动询问待处理事项（只在有user_id且数据库可用时检测）
+        if db and user_id:
+            pending = self._get_pending_summary(db)
+            if pending["tickets"] > 0 or pending["leaves"] > 0:
+                lines = ["\n\n对了，我检测到你有一些待处理事项："]
+                if pending["tickets"] > 0:
+                    lines.append(f"  • {pending['tickets']} 条投诉/反馈工单待跟进")
+                if pending["leaves"] > 0:
+                    lines.append(f"  • {pending['leaves']} 条请假申请待审批")
+                lines.append("\n需要我帮你处理吗？回复「处理投诉」或「审批请假」即可~")
+                response += "\n".join(lines)
+
+        return response
 
     def _local_chitchat(self, user_input: str) -> str:
         """本地闲聊 fallback（LLM不可用时）"""
@@ -909,6 +1307,103 @@ class EnterpriseAgent:
 
         return f"闲聊时间~ 不过说到正事，我可以帮你管理CRM客户、整理日报、查询数据。有什么工作上的需要吗？"
 
+    # ==================== 列表序号选择 ====================
+
+    @staticmethod
+    def _extract_ordinal_index(text: str) -> int | None:
+        """从用户输入中提取列表序号，支持：1、第1条、第一条、第1个、[1] 等"""
+        cleaned = text.strip()
+        # 阿拉伯数字格式
+        patterns = [
+            r"^第?(\d+)[条个号位]?[。！.!]?$",
+            r"[「【\[\(\"'（(](\d+)[」】\]\"'）)]",
+            r"^(\d+)$",
+        ]
+        for p in patterns:
+            m = re.search(p, cleaned)
+            if m:
+                return int(m.group(1))
+
+        # 中文数字
+        cn_nums = {
+            "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5,
+            "六": 6, "七": 7, "八": 8, "九": 9, "十": 10,
+        }
+        m = re.search(r"^第?([一二两三四五六七八九十]+)[条个号位]?[。！.!]?$", cleaned)
+        if m:
+            cn = m.group(1)
+            if cn in cn_nums:
+                return cn_nums[cn]
+            if cn.startswith("十"):
+                if len(cn) == 1:
+                    return 10
+                rest = cn[1:]
+                return 10 + cn_nums.get(rest, 0)
+            if cn.endswith("十"):
+                return cn_nums.get(cn[:-1], 0) * 10
+            if "十" in cn:
+                parts = cn.split("十")
+                tens = cn_nums.get(parts[0], 0) if parts[0] else 1
+                ones = cn_nums.get(parts[1], 0) if len(parts) > 1 and parts[1] else 0
+                return tens * 10 + ones
+        return None
+
+    def _handle_selection_input(self, user_input: str, state: SlotState, db, user_id: int = None) -> dict:
+        """处理用户在列表选择阶段的输入（如回复「第1条」「1」）"""
+        stm = get_conversation_state_manager()
+        idx = self._extract_ordinal_index(user_input)
+        if idx is None:
+            # 不是有效序号，清除状态
+            stm.clear(user_id=user_id)
+            return {"intent": "chitchat", "response": "已取消选择。请重新描述你的需求~", "confidence": 0.8}
+
+        index_map = state.extra.get("_index_to_id", {})
+        real_id = index_map.get(idx)
+        if not real_id:
+            # 序号超出范围，保留状态让用户重新输入
+            selection_type = state.extra.get("_selection_type", "")
+            return {
+                "intent": selection_type or "chitchat",
+                "response": f"序号 {idx} 不存在，请从刚才的列表中选择有效的序号，或输入「取消」退出。",
+                "confidence": 0.9,
+            }
+
+        selection_type = state.extra.get("_selection_type")
+
+        if selection_type == "ticket_update":
+            new_status = state.extra.get("_new_status", "")
+            stm.clear(user_id=user_id)
+            # 构造一个带编号的请求重新处理
+            constructed_input = f"把投诉 #{real_id} 状态改为{new_status}" if new_status else f"更新工单 #{real_id}"
+            response = self._handle_ticket_update(constructed_input, {}, db, user_id)
+            return {"intent": "ticket_update", "response": response, "confidence": 0.95}
+
+        elif selection_type == "approval":
+            approved = state.extra.get("_approved")
+            is_complaint = state.extra.get("_is_complaint", False)
+            if approved is None:
+                # 还需要知道是通过还是驳回
+                state.extra["_selected_id"] = real_id
+                state.extra["_awaiting_decision"] = True
+                state.extra["_awaiting_selection"] = False
+                stm.update(state, user_id=user_id)
+                obj_name = "投诉/反馈" if is_complaint else "请假"
+                return {
+                    "intent": "approval",
+                    "response": f"已选择 #{real_id}，你想「通过」还是「驳回」这条{obj_name}申请？",
+                    "confidence": 0.95,
+                }
+            else:
+                stm.clear(user_id=user_id)
+                decision = "通过" if approved else "驳回"
+                obj = "投诉" if is_complaint else "请假"
+                constructed_input = f"{decision}{obj} #{real_id}"
+                response = self._handle_approval(constructed_input, {}, db, user_id)
+                return {"intent": "approval", "response": response, "confidence": 0.95}
+
+        stm.clear(user_id=user_id)
+        return {"intent": "chitchat", "response": "选择流程出现错误，请重新描述你的需求~", "confidence": 0.8}
+
     # ==================== 槽位填充 ====================
 
     def continue_data_collection(self, user_input: str, state: SlotState,
@@ -942,6 +1437,34 @@ class EnterpriseAgent:
         # ===== 确认阶段 =====
         if state.phase == "confirming":
             if SlotState.is_confirm(user_input):
+                # 日报意图：实际写入数据库
+                if state.intent == "daily_report" and db:
+                    report_data = state.extra.get("report_data", {})
+                    uid = user_id or state.collected.get("employee_id")
+                    from datetime import date
+                    try:
+                        from crud import ReportCRUD
+                        ReportCRUD.create(db,
+                            employee_id=uid,
+                            content=report_data.get("summary", state.collected.get("content", "")),
+                            report_date=report_data.get("report_date") or date.today().strftime("%Y-%m-%d"),
+                            work_type=report_data.get("work_type", "日常工作"),
+                            summary=report_data.get("summary", ""),
+                        )
+                        db.commit()
+                        stm.clear(user_id=user_id)
+                        return {
+                            "intent": state.intent,
+                            "response": "✅ 日报已提交成功！你可以在「员工日报」页面查看。",
+                            "confidence": 1.0,
+                        }
+                    except Exception as e:
+                        stm.clear(user_id=user_id)
+                        return {
+                            "intent": state.intent,
+                            "response": f"日报提交失败: {e}",
+                            "confidence": 0.9,
+                        }
                 stm.clear(user_id=user_id)
                 return {
                     "intent": state.intent,

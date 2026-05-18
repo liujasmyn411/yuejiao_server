@@ -19,6 +19,12 @@ class NL2SQL:
         "course_project", "event_lecture", "event_registration",
     ]
 
+    # 常见字段值自动修正映射（防止LLM生成英文值）
+    VALUE_FIXES = {
+        "service_type = 'leave'": "service_type = '请假'",
+        "service_type = 'lecture'": "service_type = '讲座'",
+    }
+
     # UPDATE安全白名单: {表名: {允许SET的列, ...}}
     UPDATE_WHITELIST = {
         "crm_lead": {"status", "follow_up_history", "next_follow_time", "score", "owner_employee_id"},
@@ -67,6 +73,10 @@ class NL2SQL:
         sql = parsed.get("sql", "")
         if not sql:
             return {"error": "未能生成SQL语句"}
+
+        # 自动修正常见字段值（LLM可能把中文值猜成英文）
+        for wrong, correct in self.VALUE_FIXES.items():
+            sql = sql.replace(wrong, correct)
 
         # 安全检查
         safe, reason = self._validate_sql(sql)

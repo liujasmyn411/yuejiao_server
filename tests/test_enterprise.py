@@ -510,3 +510,183 @@ class TestVoiceToReport:
     def test_auth_required_401(self, client):
         resp = client.post("/api/enterprise/voice-report", json={"message": "test"})
         assert resp.status_code == 401
+
+
+# ══════════════════════════════════════════════════════════════════════
+# P1: 待处理事项主动询问
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestActivePendingReminder:
+    """员工闲聊时，系统主动检测待办并询问"""
+
+    def test_chitchat_shows_pending_summary(self, db_session, seed_employee, seed_student):
+        """有待办时，闲聊回复主动附加待办提醒"""
+        from agents.enterprise.agent import EnterpriseAgent
+        from model import StudentFeedbackTicket, StudentAdminService
+
+        # 构造待办数据
+        db_session.add(StudentFeedbackTicket(student_id=seed_student.id, content="测试投诉", status="待处理"))
+        db_session.add(StudentAdminService(student_id=seed_student.id, service_type="请假", status="待审批"))
+        db_session.commit()
+
+        agent = EnterpriseAgent()
+        with patch("agents.enterprise.agent.get_llm_client") as mock_llm:
+            mock_llm.return_value.chat.return_value = "你好！有什么可以帮你的？"
+            resp = agent._handle_chitchat("你好", {}, db_session, seed_employee.id)
+
+        assert "待处理事项" in resp
+        assert "1 条投诉/反馈工单待跟进" in resp
+        assert "1 条请假申请待审批" in resp
+        assert "处理投诉" in resp
+        assert "审批请假" in resp
+
+    def test_chitchat_no_pending_no_reminder(self, db_session, seed_employee):
+        """无待办时，闲聊不附加提醒"""
+        from agents.enterprise.agent import EnterpriseAgent
+
+        agent = EnterpriseAgent()
+        with patch("agents.enterprise.agent.get_llm_client") as mock_llm:
+            mock_llm.return_value.chat.return_value = "你好！有什么可以帮你的？"
+            resp = agent._handle_chitchat("你好", {}, db_session, seed_employee.id)
+
+        assert "待处理事项" not in resp
+
+    def test_quick_route_handle_complaint(self, db_session, seed_employee, seed_student):
+        """快捷路由：处理投诉直接列出待处理工单"""
+        from agents.enterprise.agent import EnterpriseAgent
+        from model import StudentFeedbackTicket
+
+        db_session.add(StudentFeedbackTicket(student_id=seed_student.id, content="测试投诉内容", status="待处理"))
+        db_session.commit()
+
+        agent = EnterpriseAgent()
+        result = agent._quick_route("处理投诉", db=db_session, user_id=seed_employee.id)
+        assert result is not None
+        assert "待处理投诉" in result[1]
+        assert "测试投诉" in result[1]
+
+    def test_quick_route_approve_leave(self, db_session, seed_employee, seed_student):
+        """快捷路由：审批请假直接列出待审批请假"""
+        from agents.enterprise.agent import EnterpriseAgent
+        from model import StudentAdminService
+
+        db_session.add(StudentAdminService(student_id=seed_student.id, service_type="请假", status="待审批"))
+        db_session.commit()
+
+        agent = EnterpriseAgent()
+        result = agent._quick_route("审批请假", db=db_session, user_id=seed_employee.id)
+        assert result is not None
+        assert "待审批请假" in result[1]
+
+
+# ══════════════════════════════════════════════════════════════════════
+# P2: 自然语言指令解析增强
+# ══════════════════════════════════════════════════════════════════════
+
+
+class TestNaturalLanguageCommand:
+    """自然语言指令解析：审批同义词 + 工单状态更新"""
+
+    def test_ticket_update_by_student_name(self, db_session, seed_employee, seed_student):
+        """按学生姓名更新投诉状态"""
+        from agents.enterprise.agent import EnterpriseAgent
+        from model import StudentFeedbackTicket
+
+        db_session.add(StudentFeedbackTicket(student_id=seed_student.id, content="测试投诉内容", status="待处理"))
+        db_session.commit()
+
+        agent = EnterpriseAgent()
+        with patch("agents.enterprise.agent.get_llm_client") as mock_llm:
+            mock_llm.return_value.extract_info.return_value = {
+                "学生姓名": "测试学生",
+                "新状态": "已跟进",
+            }
+            resp = agent._handle_ticket_update("把测试学生的投诉状态更新为已跟进", {}, db_session, seed_employee.id)
+
+        assert "状态已更新" in resp
+        assert "已跟进" in resp
+        assert "待处理" in resp  # 原状态
+
+        # 验证数据库
+        ticket = db_session.query(StudentFeedbackTicket).filter(
+            StudentFeedbackTicket.student_id == seed_student.id
+        ).first()
+        assert ticket.status == "已跟进"
+        assert ticket.handle_user_id == seed_employee.id
+
+    def test_ticket_update_by_id(self, db_session, seed_employee, seed_student):
+        """按工单编号更新状态"""
+        from agents.enterprise.agent import EnterpriseAgent
+        from model import StudentFeedbackTicket
+
+        ticket = StudentFeedbackTicket(student_id=seed_student.id, content="测试投诉", status="待处理")
+        db_session.add(ticket)
+        db_session.commit()
+        db_session.refresh(ticket)
+
+        agent = EnterpriseAgent()
+        with patch("agents.enterprise.agent.get_llm_client") as mock_llm:
+            mock_llm.return_value.extract_info.return_value = {}
+            resp = agent._handle_ticket_update(f"将投诉 #{ticket.id} 状态改为已解决", {}, db_session, seed_employee.id)
+
+        assert "状态已更新" in resp
+        assert "已解决" in resp
+
+    def test_ticket_update_duplicate_status_blocked(self, db_session, seed_employee, seed_student):
+        """重复更新同一状态应被拦截"""
+        from agents.enterprise.agent import EnterpriseAgent
+        from model import StudentFeedbackTicket
+
+        db_session.add(StudentFeedbackTicket(student_id=seed_student.id, content="测试投诉", status="已跟进"))
+        db_session.commit()
+
+        agent = EnterpriseAgent()
+        with patch("agents.enterprise.agent.get_llm_client") as mock_llm:
+            mock_llm.return_value.extract_info.return_value = {"学生姓名": "测试学生", "新状态": "已跟进"}
+            resp = agent._handle_ticket_update("把测试学生的投诉更新为已跟进", {}, db_session, seed_employee.id)
+
+        assert "无需重复更新" in resp
+
+    def test_ticket_update_invalid_status_rejected(self, db_session, seed_employee, seed_student):
+        """无效状态应被拒绝"""
+        from agents.enterprise.agent import EnterpriseAgent
+        from model import StudentFeedbackTicket
+
+        db_session.add(StudentFeedbackTicket(student_id=seed_student.id, content="测试投诉", status="待处理"))
+        db_session.commit()
+
+        agent = EnterpriseAgent()
+        with patch("agents.enterprise.agent.get_llm_client") as mock_llm:
+            mock_llm.return_value.extract_info.return_value = {"学生姓名": "测试学生", "新状态": "随便写"}
+            resp = agent._handle_ticket_update("把测试学生的投诉更新为随便写", {}, db_session, seed_employee.id)
+
+        assert "不支持的状态" in resp
+
+    def test_quick_route_approve_synonyms(self, db_session, seed_employee, seed_student):
+        """审批同义词：同意/批准/准予 均应触发审批路由"""
+        from agents.enterprise.agent import EnterpriseAgent
+        from model import StudentAdminService
+
+        db_session.add(StudentAdminService(student_id=seed_student.id, service_type="请假", status="待审批"))
+        db_session.commit()
+
+        agent = EnterpriseAgent()
+        for phrase in ["同意测试学生的请假", "批准测试学生的请假", "准予测试学生的请假"]:
+            result = agent._quick_route(phrase, db=db_session, user_id=seed_employee.id)
+            assert result is not None, f"'{phrase}' 应被识别为审批指令"
+            assert result[0] == "approval"
+
+    def test_quick_route_ticket_update(self, db_session, seed_employee, seed_student):
+        """快捷路由：更新投诉状态指令直接命中 ticket_update"""
+        from agents.enterprise.agent import EnterpriseAgent
+        from model import StudentFeedbackTicket
+
+        db_session.add(StudentFeedbackTicket(student_id=seed_student.id, content="测试投诉", status="待处理"))
+        db_session.commit()
+
+        agent = EnterpriseAgent()
+        for phrase in ["把测试学生的投诉状态更新为已跟进", "修改测试学生的投诉为已解决"]:
+            result = agent._quick_route(phrase, db=db_session, user_id=seed_employee.id)
+            assert result is not None, f"'{phrase}' 应被识别为状态更新"
+            assert result[0] == "ticket_update"

@@ -13,6 +13,7 @@ const Modal = (() => {
       cancelText = '取消',
       size = '',
       showCancel = true,
+      autoClose = true,
     } = opts;
 
     const overlay = document.createElement('div');
@@ -35,7 +36,7 @@ const Modal = (() => {
     overlay.querySelector('.modal__cancel') && (overlay.querySelector('.modal__cancel').onclick = close);
     overlay.querySelector('.modal__confirm').onclick = async () => {
       if (onConfirm) await onConfirm();
-      close();
+      if (autoClose) close();
     };
     overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
