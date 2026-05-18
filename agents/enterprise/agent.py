@@ -947,7 +947,8 @@ class EnterpriseAgent:
                 for i, p in enumerate(pending, 1):
                     start = str(p.start_time)[:16] if p.start_time else "?"
                     end = str(p.end_time)[:16] if p.end_time else "?"
-                    lines.append(f"  {i}. [#{p.id}] [{p.leave_type or '请假'}] {start} ~ {end} — {p.reason or '无理由'}")
+                    status_icon = {"待审批": "⏳", "已通过": "✅", "已驳回": "❌"}.get(p.status, "")
+                    lines.append(f"  {i}. {status_icon} [#{p.id}] [{p.leave_type or '请假'}] {start} ~ {end} | 状态:{p.status or '待审批'} | {p.reason or '无理由'}")
                     index_map[i] = p.id
                 
                 # 保存等待选择状态
@@ -998,7 +999,8 @@ class EnterpriseAgent:
                     ).first()
                     name = student.real_name if student else f"学生{p.student_id}"
                     urgency = p.urgency_level or "中"
-                    lines.append(f"  {i}. [#{p.id}] {name} [{p.feedback_type or '投诉'}] 紧急度:{urgency} | {p.content[:30]}...")
+                    status_icon = {"待处理": "⏳", "已处理": "✅", "已跟进": "📝", "处理中": "🔧", "已解决": "✅", "已驳回": "❌"}.get(p.status, "")
+                    lines.append(f"  {i}. {status_icon} [#{p.id}] {name} [{p.feedback_type or '投诉'}] 紧急度:{urgency} | 状态:{p.status or '待处理'} | {p.content[:30]}...")
                     index_map[i] = p.id
                 if len(pending) > 15:
                     lines.append(f"  ... 还有 {len(pending) - 15} 条")

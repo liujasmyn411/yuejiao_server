@@ -96,7 +96,8 @@ NL2SQL_PROMPT = """你是一个安全的NL2SQL转换器。将用户的自然语�
 4. SELECT查询必须包含 WHERE delete_flag = 0（如果该表有此字段）
 5. 对字符串使用 LIKE '%关键词%' 做模糊匹配
 6. LIMIT 不超过 100
-7. 如果用户意图不明确或不在允许范围内，返回 error
+7. 查询 student_feedback_ticket / student_admin_service / event_registration 等记录时，若涉及列表展示或状态筛选，必须包含 status 字段
+8. 如果用户意图不明确或不在允许范围内，返回 error
 
 用户输入：{user_input}
 
